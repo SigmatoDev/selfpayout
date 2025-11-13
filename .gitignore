@@ -1,0 +1,11 @@
+node_modules
+.pnpm-store
+.env
+.env.*
+dist
+.build
+.next
+.DS_Store
+*.log
+coverage
+prisma/migrations

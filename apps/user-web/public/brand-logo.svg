@@ -1,0 +1,13 @@
+<svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+  <title>Selfcheckout mark</title>
+  <g fill="none" fill-rule="evenodd">
+    <path
+      fill="#0F4DA6"
+      d="M54 22h44c19.33 0 35 15.67 35 35s-15.67 35-35 35H70c-7.73 0-14 6.27-14 14s6.27 14 14 14h57v18H70c-21.54 0-39-17.46-39-39s17.46-39 39-39h28c8.84 0 16-7.16 16-16s-7.16-16-16-16H32V22h22Z"
+    />
+    <path
+      fill="#41C067"
+      d="M66.24 90.9 82.6 107.1l26.53-37.6 12.99 9.32-35.64 50.58-29.5-29.37z"
+    />
+  </g>
+</svg>

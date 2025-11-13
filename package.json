@@ -1,0 +1,22 @@
+{
+  "name": "selfcheckout",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Selfcheckout SaaS platform monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "pnpm --filter api dev",
+    "dev:super-admin": "pnpm --filter super-admin dev",
+    "dev:retailer-web": "pnpm --filter retailer-web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format"
+  },
+  "engines": {
+    "node": ">=18.17.0",
+    "pnpm": ">=8"
+  }
+}
