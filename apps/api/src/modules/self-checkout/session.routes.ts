@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import {
@@ -12,7 +12,7 @@ import {
   verifySessionHandler
 } from './session.controller';
 
-export const selfCheckoutRouter = Router();
+export const selfCheckoutRouter: ExpressRouter = Router();
 
 selfCheckoutRouter.post('/sessions', startSessionHandler);
 selfCheckoutRouter.get('/sessions/:id', getSessionHandler);

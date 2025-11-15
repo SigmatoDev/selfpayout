@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import { createInvoiceHandler, listInvoicesHandler } from './receipt.controller';
 
-export const receiptRouter = Router();
+export const receiptRouter: ExpressRouter = Router();
 
 receiptRouter.use(authenticate(['RETAILER_ADMIN', 'RETAILER_STAFF', 'SUPER_ADMIN']));
 receiptRouter.get('/', listInvoicesHandler);

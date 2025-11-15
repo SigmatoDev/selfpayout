@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import { outstandingLedgerHandler, salesSummaryHandler } from './sales.controller';
 
-export const salesRouter = Router();
+export const salesRouter: ExpressRouter = Router();
 
 salesRouter.use(authenticate(['RETAILER_ADMIN', 'RETAILER_STAFF', 'SUPER_ADMIN']));
 salesRouter.get('/summary', salesSummaryHandler);

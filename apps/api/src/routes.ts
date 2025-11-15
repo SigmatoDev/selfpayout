@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 
 import { adminRouter } from './modules/admin/admin.routes';
 import { authRouter } from './modules/auth/auth.routes';
@@ -12,7 +12,7 @@ import { salesRouter } from './modules/sales/sales.routes';
 import { selfCheckoutRouter } from './modules/self-checkout/session.routes';
 import { subscriptionRouter } from './modules/subscriptions/subscription.routes';
 
-export const router = Router();
+export const router: ExpressRouter = Router();
 
 router.use('/auth', authRouter);
 router.use('/admin', adminRouter);

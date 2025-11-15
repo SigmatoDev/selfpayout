@@ -1,12 +1,12 @@
 import cors from 'cors';
-import express, { type Request } from 'express';
+import express, { type Express, type Request } from 'express';
 import helmet from 'helmet';
 
 import { env } from './config/env';
 import { errorHandler } from './middleware/error-handler';
 import { router } from './routes';
 
-export const createApp = () => {
+export const createApp = (): Express => {
   const app = express();
 
   app.use(helmet());

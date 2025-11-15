@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 
 import { authenticate } from '../../middleware/auth';
 import {
@@ -10,7 +10,7 @@ import {
   updateRetailerHandler
 } from './retailer.controller';
 
-export const retailerRouter = Router();
+export const retailerRouter: ExpressRouter = Router();
 
 retailerRouter.post('/signup', retailerSignupHandler);
 retailerRouter.use(authenticate(['SUPER_ADMIN']));
