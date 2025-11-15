@@ -7,11 +7,12 @@ import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/controller/auth_controller.dart';
 import 'features/auth/presentation/login_screen.dart';
+import 'features/auth/presentation/splash_screen.dart';
 import 'features/signup/presentation/signup_screen.dart';
 import 'features/workspace/presentation/workspace_shell.dart';
 
-class SelfcheckoutApp extends ConsumerWidget {
-  const SelfcheckoutApp({super.key});
+class SelfPayoutApp extends ConsumerWidget {
+  const SelfPayoutApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -20,7 +21,7 @@ class SelfcheckoutApp extends ConsumerWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Selfcheckout Retailer',
+      title: 'SelfPayout Retailer',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
@@ -37,40 +38,48 @@ class AuthGate extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authControllerProvider);
     final tokenStorage = ref.watch(tokenStorageProvider);
+    final hasToken = tokenStorage.hasToken;
+    final showSplash = hasToken && (authState.isLoading || (!authState.hasValue && !authState.hasError));
 
-    void openSignup() {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const SignupScreen()),
+    final pages = <Page<dynamic>>[];
+
+    if (showSplash) {
+      pages.add(const MaterialPage(child: AppSplashScreen()));
+    } else if (authState.hasError) {
+      final asyncError = authState.asError;
+      final message = asyncError?.error is ApiException
+          ? (asyncError!.error as ApiException).message
+          : 'Unable to sign in.';
+      pages.add(
+        MaterialPage(
+          child: LoginScreen(
+            onOpenSignup: () => _openSignup(context),
+            initialError: message,
+          ),
+        ),
+      );
+    } else if (authState.value != null) {
+      pages.add(const MaterialPage(child: WorkspaceShell()));
+    } else {
+      pages.add(
+        MaterialPage(
+          child: LoginScreen(
+            onOpenSignup: () => _openSignup(context),
+            isBootstrapping: hasToken,
+          ),
+        ),
       );
     }
 
-    return authState.when(
-      data: (user) {
-        if (user != null) {
-          return const WorkspaceShell();
-        }
-        return LoginScreen(
-          onOpenSignup: openSignup,
-        );
-      },
-      loading: () {
-        if (tokenStorage.hasToken) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return LoginScreen(
-          onOpenSignup: openSignup,
-          isBootstrapping: true,
-        );
-      },
-      error: (error, _) {
-        final message = error is ApiException ? error.message : 'Unable to sign in.';
-        return LoginScreen(
-          onOpenSignup: openSignup,
-          initialError: message,
-        );
-      },
+    return Navigator(
+      pages: pages,
+      onPopPage: (route, result) => route.didPop(result),
+    );
+  }
+
+  void _openSignup(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SignupScreen()),
     );
   }
 }

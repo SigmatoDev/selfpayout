@@ -13,7 +13,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-        child: const SelfcheckoutApp(),
+        child: const SelfPayoutApp(),
       ),
     );
 

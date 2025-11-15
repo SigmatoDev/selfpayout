@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart';
@@ -17,25 +20,31 @@ class SignupScreen extends ConsumerStatefulWidget {
 }
 
 class _SignupScreenState extends ConsumerState<SignupScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _stepKeys = List.generate(3, (_) => GlobalKey<FormState>());
   final _ownerController = TextEditingController();
   final _shopController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _gstController = TextEditingController();
-  final _planController = TextEditingController();
   final _aadharController = TextEditingController();
   final _panController = TextEditingController();
 
   bool _gstEnabled = false;
   String _language = 'en';
+  int _currentStep = 0;
   bool _isSubmitting = false;
   String? _statusMessage;
   bool _statusSuccess = false;
 
   PlatformFile? _aadharFile;
   PlatformFile? _panFile;
+  Uint8List? _aadharBytes;
+  Uint8List? _panBytes;
+  _DocumentState _aadharState = const _DocumentState(message: 'Upload Aadhaar document');
+  _DocumentState _panState = const _DocumentState(message: 'Upload PAN document');
+
+  bool get _hasPendingUploads => _aadharState.isUploading || _panState.isUploading;
 
   @override
   void dispose() {
@@ -45,7 +54,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     _phoneController.dispose();
     _addressController.dispose();
     _gstController.dispose();
-    _planController.dispose();
     _aadharController.dispose();
     _panController.dispose();
     super.dispose();
@@ -58,27 +66,88 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg'],
     );
     if (result == null || result.files.isEmpty) return;
+
     final file = result.files.first;
     if ((file.size / (1024 * 1024)) > 8) {
       setState(() {
         _statusMessage = 'Selected file exceeds 8MB.';
         _statusSuccess = false;
       });
+      _setDocumentState(isAadhar, const _DocumentState(message: 'File exceeds 8MB'));
       return;
     }
-    setState(() {
-      if (isAadhar) {
-        _aadharFile = file;
-      } else {
-        _panFile = file;
-      }
-      _statusMessage = null;
-    });
+
+    final label = isAadhar ? 'Aadhaar' : 'PAN';
+    _setDocumentState(
+      isAadhar,
+      _DocumentState(isUploading: true, progress: 0.15, message: 'Preparing $label file...'),
+    );
+
+    try {
+      final rawBytes = await _loadFileBytes(file);
+      _setDocumentState(
+        isAadhar,
+        _DocumentState(isUploading: true, progress: 0.5, message: 'Compressing $label...'),
+      );
+      final processed = await _compressIfNeeded(rawBytes, file.extension);
+      _setDocumentState(
+        isAadhar,
+        _DocumentState(isUploading: true, progress: 0.85, message: 'Encoding $label...'),
+      );
+
+      setState(() {
+        if (isAadhar) {
+          _aadharFile = file;
+          _aadharBytes = processed;
+        } else {
+          _panFile = file;
+          _panBytes = processed;
+        }
+        _statusMessage = null;
+      });
+
+      _setDocumentState(
+        isAadhar,
+        _DocumentState(isUploading: false, progress: 1, message: '$label ready to submit'),
+      );
+    } catch (_) {
+      _setDocumentState(
+        isAadhar,
+        _DocumentState(isUploading: false, progress: 0, message: 'Failed to process $label'),
+      );
+      setState(() {
+        _statusMessage = 'Unable to process $label document. Please try again.';
+        _statusSuccess = false;
+      });
+    }
   }
 
-  Future<DocumentUpload> _buildDocumentPayload(PlatformFile file) async {
-    final bytes = file.bytes ??
-        await File(file.path!).readAsBytes();
+  Future<Uint8List> _loadFileBytes(PlatformFile file) async {
+    if (file.bytes != null) {
+      return Uint8List.fromList(file.bytes!);
+    }
+    if (file.path == null) {
+      throw Exception('File data unavailable');
+    }
+    final data = await File(file.path!).readAsBytes();
+    return Uint8List.fromList(data);
+  }
+
+  Future<Uint8List> _compressIfNeeded(Uint8List bytes, String? extension) async {
+    final ext = extension?.toLowerCase();
+    if (ext == null || (ext != 'png' && ext != 'jpg' && ext != 'jpeg')) {
+      return bytes;
+    }
+    final compressed = await FlutterImageCompress.compressWithList(
+      bytes,
+      minWidth: 1280,
+      minHeight: 720,
+      quality: 70,
+    );
+    return Uint8List.fromList(compressed);
+  }
+
+  Future<DocumentUpload> _buildDocumentPayload(PlatformFile file, Uint8List bytes) async {
     final base64Data = base64Encode(bytes);
     final ext = file.extension?.toLowerCase();
     final contentType = switch (ext) {
@@ -95,7 +164,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_validateAllSteps()) return;
     if (_gstEnabled && _gstController.text.trim().isEmpty) {
       setState(() {
         _statusMessage = 'GST number is required when GST is enabled.';
@@ -103,7 +172,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       });
       return;
     }
-    if (_aadharFile == null || _panFile == null) {
+    if (_hasPendingUploads) {
+      setState(() {
+        _statusMessage = 'Please wait for document uploads to finish.';
+        _statusSuccess = false;
+      });
+      return;
+    }
+    if (_aadharFile == null || _panFile == null || _aadharBytes == null || _panBytes == null) {
       setState(() {
         _statusMessage = 'Please upload Aadhaar and PAN documents.';
         _statusSuccess = false;
@@ -118,8 +194,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
     try {
       final documents = {
-        'aadhar': await _buildDocumentPayload(_aadharFile!),
-        'pan': await _buildDocumentPayload(_panFile!),
+        'aadhar': await _buildDocumentPayload(_aadharFile!, _aadharBytes!),
+        'pan': await _buildDocumentPayload(_panFile!, _panBytes!),
       };
 
       final payload = SignupPayload(
@@ -130,7 +206,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         address: _addressController.text.trim(),
         gstEnabled: _gstEnabled,
         gstNumber: _gstController.text.trim().isEmpty ? null : _gstController.text.trim(),
-        subscriptionPlanId: _planController.text.trim().isEmpty ? null : _planController.text.trim(),
         languagePreference: _language,
         aadharNumber: _aadharController.text.trim(),
         panNumber: _panController.text.trim(),
@@ -145,11 +220,24 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               'Thanks! Your application has been submitted. We will reach out post review.';
           _statusSuccess = true;
           _isSubmitting = false;
-          _formKey.currentState?.reset();
+          _stepKeys.forEach((key) => key.currentState?.reset());
+          _ownerController.clear();
+          _shopController.clear();
+          _emailController.clear();
+          _phoneController.clear();
+          _addressController.clear();
+          _gstController.clear();
+          _aadharController.clear();
+          _panController.clear();
           _gstEnabled = false;
           _language = 'en';
           _aadharFile = null;
           _panFile = null;
+          _aadharBytes = null;
+          _panBytes = null;
+          _aadharState = const _DocumentState(message: 'Upload Aadhaar document');
+          _panState = const _DocumentState(message: 'Upload PAN document');
+          _currentStep = 0;
         });
       }
     } on ApiException catch (error) {
@@ -163,136 +251,254 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final steps = [
+      Step(
+        title: const Text('Profile'),
+        state: _stepState(0),
+        isActive: _currentStep >= 0,
+        content: _buildProfileForm(),
+      ),
+      Step(
+        title: const Text('Business'),
+        state: _stepState(1),
+        isActive: _currentStep >= 1,
+        content: _buildBusinessForm(),
+      ),
+      Step(
+        title: const Text('Verification'),
+        state: _stepState(2),
+        isActive: _currentStep >= 2,
+        content: _buildVerificationForm(),
+      ),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Retailer onboarding'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Share your business details and documents. A success specialist will review and enable access.',
-                  style: TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 24),
-                _buildTextField(
-                  controller: _ownerController,
-                  label: 'Owner name',
-                  validator: _requiredValidator,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _shopController,
-                  label: 'Store / brand name',
-                  validator: _requiredValidator,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _emailController,
-                  label: 'Contact email',
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) return 'Required';
-                    if (!value.contains('@')) return 'Enter a valid email';
-                    return null;
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Expanded(
+                child: Stepper(
+                  type: StepperType.vertical,
+                  currentStep: _currentStep,
+                  onStepContinue: _handleContinue,
+                  onStepCancel: _handleBack,
+                  onStepTapped: _handleStepTapped,
+                  controlsBuilder: (context, details) {
+                    final isLast = _currentStep == steps.length - 1;
+                    return Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: _isSubmitting ? null : details.onStepContinue,
+                          child: _isSubmitting && isLast
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : Text(isLast ? 'Submit application' : 'Next'),
+                        ),
+                        const SizedBox(width: 12),
+                        if (_currentStep > 0)
+                          TextButton(
+                            onPressed: _isSubmitting ? null : details.onStepCancel,
+                            child: const Text('Back'),
+                          ),
+                      ],
+                    );
                   },
+                  steps: steps,
                 ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _phoneController,
-                  label: 'Contact phone',
-                  keyboardType: TextInputType.phone,
-                  validator: _requiredValidator,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _addressController,
-                  label: 'Registered address',
-                  maxLines: 3,
-                  validator: _requiredValidator,
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: _gstEnabled,
-                  title: const Text('GST Registered'),
-                  subtitle: const Text('Enable if you charge GST on invoices'),
-                  onChanged: (value) => setState(() => _gstEnabled = value),
-                ),
-                const SizedBox(height: 8),
-                _buildTextField(
-                  controller: _gstController,
-                  label: 'GST number',
-                  enabled: _gstEnabled,
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _language,
-                  items: const [
-                    DropdownMenuItem(value: 'en', child: Text('English')),
-                    DropdownMenuItem(value: 'hi', child: Text('हिन्दी')),
-                    DropdownMenuItem(value: 'ka', child: Text('ಕನ್ನಡ')),
-                  ],
-                  decoration: const InputDecoration(labelText: 'Language preference'),
-                  onChanged: (value) => setState(() => _language = value ?? 'en'),
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _planController,
-                  label: 'Subscription plan (optional)',
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _aadharController,
-                  label: 'Aadhaar number',
-                  validator: _requiredValidator,
-                ),
-                const SizedBox(height: 16),
-                _buildUploader(
-                  label: 'Upload Aadhaar (PDF / Image)',
-                  fileName: _aadharFile?.name,
-                  onTap: () => _pickDocument(true),
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _panController,
-                  label: 'PAN number',
-                  validator: _requiredValidator,
-                ),
-                const SizedBox(height: 16),
-                _buildUploader(
-                  label: 'Upload PAN (PDF / Image)',
-                  fileName: _panFile?.name,
-                  onTap: () => _pickDocument(false),
-                ),
-                const SizedBox(height: 24),
-                if (_statusMessage != null)
-                  Text(
+              ),
+              if (_statusMessage != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
                     _statusMessage!,
-                    style: TextStyle(
-                      color: _statusSuccess ? Colors.teal : Colors.redAccent,
-                    ),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: _statusSuccess ? Colors.teal : Colors.redAccent),
                   ),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submit,
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                        )
-                      : const Text('Submit application'),
                 ),
-              ],
-            ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  StepState _stepState(int step) {
+    if (_currentStep > step) return StepState.complete;
+    if (_currentStep == step) return StepState.editing;
+    return StepState.indexed;
+  }
+
+  void _handleContinue() {
+    final isLast = _currentStep == _stepKeys.length - 1;
+    if (!_validateStep(_currentStep)) return;
+    if (_hasPendingUploads) {
+      setState(() {
+        _statusMessage = 'Please wait for document uploads to finish.';
+        _statusSuccess = false;
+      });
+      return;
+    }
+    if (isLast) {
+      _submit();
+    } else {
+      setState(() => _currentStep += 1);
+    }
+  }
+
+  void _handleBack() {
+    if (_currentStep == 0) return;
+    setState(() => _currentStep -= 1);
+  }
+
+  void _handleStepTapped(int step) {
+    if (step > _currentStep && !_validateStep(_currentStep)) {
+      return;
+    }
+    if (_isSubmitting) return;
+    setState(() => _currentStep = step);
+  }
+
+  bool _validateStep(int index) {
+    final formState = _stepKeys[index].currentState;
+    return formState?.validate() ?? true;
+  }
+
+  bool _validateAllSteps() {
+    for (var i = 0; i < _stepKeys.length; i += 1) {
+      if (!_validateStep(i)) {
+        setState(() => _currentStep = i);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Widget _buildProfileForm() {
+    return Form(
+      key: _stepKeys[0],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Share your business details and documents. A success specialist will review and enable access.',
+            style: TextStyle(fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          _buildTextField(
+            controller: _ownerController,
+            label: 'Owner name',
+            validator: _requiredValidator,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: _shopController,
+            label: 'Store / brand name',
+            validator: _requiredValidator,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: _emailController,
+            label: 'Contact email',
+            keyboardType: TextInputType.emailAddress,
+            validator: _emailValidator,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: _phoneController,
+            label: 'Contact phone',
+            keyboardType: TextInputType.phone,
+            validator: _phoneValidator,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBusinessForm() {
+    return Form(
+      key: _stepKeys[1],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTextField(
+            controller: _addressController,
+            label: 'Registered address',
+            maxLines: 3,
+            validator: _requiredValidator,
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            value: _gstEnabled,
+            title: const Text('GST registered'),
+            subtitle: const Text('Enable if you charge GST on invoices'),
+            onChanged: (value) => setState(() => _gstEnabled = value),
+          ),
+          const SizedBox(height: 8),
+          _buildTextField(
+            controller: _gstController,
+            label: 'GST number',
+            enabled: _gstEnabled,
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: _language,
+            decoration: const InputDecoration(labelText: 'Language preference'),
+            items: const [
+              DropdownMenuItem(value: 'en', child: Text('English')),
+              DropdownMenuItem(value: 'hi', child: Text('हिन्दी')),
+              DropdownMenuItem(value: 'ka', child: Text('ಕನ್ನಡ')),
+            ],
+            onChanged: (value) => setState(() => _language = value ?? 'en'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerificationForm() {
+    return Form(
+      key: _stepKeys[2],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTextField(
+            controller: _aadharController,
+            label: 'Aadhaar number',
+            keyboardType: TextInputType.number,
+            validator: _aadhaarValidator,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+          const SizedBox(height: 16),
+          _buildUploader(
+            label: 'Upload Aadhaar (PDF / Image)',
+            fileName: _aadharFile?.name,
+            onTap: () => _pickDocument(true),
+            state: _aadharState,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: _panController,
+            label: 'PAN number',
+            validator: _requiredValidator,
+          ),
+          const SizedBox(height: 16),
+          _buildUploader(
+            label: 'Upload PAN (PDF / Image)',
+            fileName: _panFile?.name,
+            onTap: () => _pickDocument(false),
+            state: _panState,
+          ),
+        ],
       ),
     );
   }
@@ -304,6 +510,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     int maxLines = 1,
     bool enabled = true,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextFormField(
       controller: controller,
@@ -312,12 +519,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       enabled: enabled,
       decoration: InputDecoration(labelText: label),
       validator: validator,
+      inputFormatters: inputFormatters,
     );
   }
 
   Widget _buildUploader({
     required String label,
     required VoidCallback onTap,
+    required _DocumentState state,
     String? fileName,
   }) {
     return InkWell(
@@ -338,13 +547,48 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 children: [
                   Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
-                  Text(
-                    fileName ?? 'Tap to choose a file (max 8MB)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: fileName == null ? Colors.grey : Theme.of(context).colorScheme.primary,
+                  if (fileName != null)
+                    Row(
+                      children: [
+                        Icon(Icons.check_circle, size: 16, color: Colors.green.shade600),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            fileName,
+                            style: const TextStyle(fontSize: 12, color: Colors.green),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    const Text(
+                      'Tap to choose a file (max 8MB)',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                  ),
+                  const SizedBox(height: 8),
+                  if (state.isUploading)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LinearProgressIndicator(
+                          value: state.progress > 0 && state.progress <= 1 ? state.progress : null,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          state.message ?? 'Uploading...',
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary),
+                        ),
+                      ],
+                    )
+                  else if (state.message != null)
+                    Text(
+                      state.message!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: fileName != null ? Colors.green : Colors.grey,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -354,10 +598,67 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     );
   }
 
+  void _setDocumentState(bool isAadhar, _DocumentState state) {
+    setState(() {
+      if (isAadhar) {
+        _aadharState = state;
+      } else {
+        _panState = state;
+      }
+    });
+  }
+
   String? _requiredValidator(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'Required';
     }
     return null;
   }
+
+  String? _emailValidator(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Email is required';
+    }
+    final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}$');
+    if (!emailRegex.hasMatch(value.trim())) {
+      return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  String? _phoneValidator(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Phone number is required';
+    }
+    final digits = value.replaceAll(RegExp(r'\s+'), '');
+    final phoneRegex = RegExp(r'^[6-9]\d{9}$');
+    if (!phoneRegex.hasMatch(digits)) {
+      return 'Enter a valid 10-digit phone number';
+    }
+    return null;
+  }
+
+  String? _aadhaarValidator(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Aadhaar number is required';
+    }
+    final digits = value.replaceAll(RegExp(r'\s+'), '');
+    final aadhaarRegex = RegExp(r'^[2-9]\d{11}$');
+    if (!aadhaarRegex.hasMatch(digits)) {
+      return 'Enter a valid 12-digit Aadhaar number';
+    }
+    return null;
+  }
+}
+
+class _DocumentState {
+  const _DocumentState({
+    this.isUploading = false,
+    this.progress = 0,
+    this.message,
+  });
+
+  final bool isUploading;
+  final double progress;
+  final String? message;
 }

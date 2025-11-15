@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const _brandPrimary = Color(0xFF6C8FF5);
-  static const _brandAccent = Color(0xFF7EE0C3);
-  static const _softSurface = Color(0xFFFAFCFF);
-  static const _nightSurface = Color(0xFF0B1120);
+  static const _brandPrimary = Color(0xFFD00000);
+  static const _brandAccent = Color(0xFFFF6B6B);
+  static const _softSurface = Color(0xFFFFF3F3);
+  static const _nightSurface = Color(0xFF160202);
 
   static ThemeData get lightTheme {
     final base = ThemeData(
@@ -44,12 +44,17 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: _brandPrimary,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.2),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           minimumSize: const Size(0, 48),
           shadowColor: _brandPrimary.withValues(alpha: 0.35),
         ),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        selectedItemColor: _brandPrimary,
+        unselectedItemColor: Color(0xFF9CA3AF),
+        showUnselectedLabels: true,
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -97,12 +102,18 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: _brandAccent,
           foregroundColor: Colors.black87,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           minimumSize: const Size(0, 48),
           shadowColor: Colors.black.withValues(alpha: 0.3),
         ),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        selectedItemColor: _brandAccent,
+        unselectedItemColor: Colors.white70,
+        backgroundColor: Color(0xFF0F0F0F),
+        showUnselectedLabels: true,
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(

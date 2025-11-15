@@ -9,7 +9,8 @@ export const listPendingKycHandler = asyncHandler(async (req: AuthenticatedReque
   const filter = (req.query.status as string | undefined)?.toUpperCase();
   const allowed = ['PENDING', 'APPROVED', 'REJECTED', 'ALL'] as const;
   const status = allowed.includes(filter as (typeof allowed)[number]) ? (filter as (typeof allowed)[number]) : 'PENDING';
-  const kycs = await listPendingKyc(status);
+  const retailerId = req.query.retailerId as string | undefined;
+  const kycs = await listPendingKyc(status, retailerId);
   res.json({ data: kycs });
 });
 

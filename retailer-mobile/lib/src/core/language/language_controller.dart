@@ -1,17 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum SupportedLanguage { en, hi }
+enum SupportedLanguage { en, hi, ka }
 
 extension SupportedLanguageX on SupportedLanguage {
   String get code => switch (this) {
         SupportedLanguage.en => 'en',
         SupportedLanguage.hi => 'hi',
+        SupportedLanguage.ka => 'ka',
       };
 
   String get toggleLabel => switch (this) {
         SupportedLanguage.en => 'हिन्दी',
-        SupportedLanguage.hi => 'English',
+        SupportedLanguage.hi => 'ಕನ್ನಡ',
+        SupportedLanguage.ka => 'English',
       };
 }
 
@@ -47,6 +49,16 @@ const Map<SupportedLanguage, Map<TranslationKey, String>> _translations = {
     TranslationKey.offlinePending: 'सिंक के लिए बिल लंबित',
     TranslationKey.selfCheckout: 'स्वयं चेकआउट',
   },
+  SupportedLanguage.ka: {
+    TranslationKey.welcome: 'ನಮಸ್ಕಾರ',
+    TranslationKey.billing: 'ಬಿಲ್ಲಿಂಗ್',
+    TranslationKey.inventory: 'ಸಾಗರಣೆ',
+    TranslationKey.customers: 'ಗ್ರಾಹಕರು',
+    TranslationKey.reports: 'ವರದಿಗಳು',
+    TranslationKey.collectPayment: 'ಪಾವತಿ ಸಂಗ್ರಹಣೆ',
+    TranslationKey.offlinePending: 'ಸಿಂಕ್‌ಗೆ ಕಾಯುವ ಬಿಲ್ಲುಗಳು',
+    TranslationKey.selfCheckout: 'ಸ್ವಯಂ ಪಾವತಿ',
+  },
 };
 
 class LanguageStrings {
@@ -65,7 +77,9 @@ class LanguageController extends StateNotifier<SupportedLanguage> {
   final SharedPreferences _prefs;
 
   void toggle() {
-    final next = state == SupportedLanguage.en ? SupportedLanguage.hi : SupportedLanguage.en;
+    final all = SupportedLanguage.values;
+    final currentIndex = all.indexOf(state);
+    final next = all[(currentIndex + 1) % all.length];
     setLanguage(next);
   }
 
@@ -76,8 +90,12 @@ class LanguageController extends StateNotifier<SupportedLanguage> {
 
   static SupportedLanguage _initialLanguage(SharedPreferences prefs) {
     final stored = prefs.getString(_storageKey);
-    if (stored == SupportedLanguage.hi.code) {
-      return SupportedLanguage.hi;
+    if (stored != null) {
+      for (final value in SupportedLanguage.values) {
+        if (value.code == stored) {
+          return value;
+        }
+      }
     }
     return SupportedLanguage.en;
   }

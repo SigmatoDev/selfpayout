@@ -92,6 +92,10 @@ const RetailersPage = () => {
   const [assignRetailerId, setAssignRetailerId] = useState<string | null>(null);
   const [hasToken, setHasToken] = useState(false);
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
+  const [passwordModal, setPasswordModal] = useState<{ retailerId: string; retailerName: string } | null>(null);
+  const [customPassword, setCustomPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordRequestSource, setPasswordRequestSource] = useState<'auto' | 'custom' | null>(null);
 
   useEffect(() => {
     setHasToken(Boolean(getAuthToken()));
@@ -145,6 +149,18 @@ const RetailersPage = () => {
       if (response.data.temporaryPassword) {
         setSecret({ email: response.data.retailer.contactEmail, password: response.data.temporaryPassword });
       }
+      if (passwordRequestSource === 'custom') {
+        setPasswordModal(null);
+        setCustomPassword('');
+        setPasswordError(null);
+      }
+      setPasswordRequestSource(null);
+    },
+    onError: (error) => {
+      if (passwordRequestSource === 'custom') {
+        setPasswordError(error.message);
+      }
+      setPasswordRequestSource(null);
     }
   });
 
@@ -159,7 +175,21 @@ const RetailersPage = () => {
 
   const handleResetPassword = (retailerId: string) => {
     const password = generatePassword();
+    setPasswordRequestSource('auto');
     resetPasswordMutation.mutate({ retailerId, password });
+  };
+
+  const handleCustomPasswordSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!passwordModal) return;
+    const trimmed = customPassword.trim();
+    if (trimmed.length < 8) {
+      setPasswordError('Password must be at least 8 characters.');
+      return;
+    }
+    setPasswordError(null);
+    setPasswordRequestSource('custom');
+    resetPasswordMutation.mutate({ retailerId: passwordModal.retailerId, password: trimmed });
   };
 
   const activePlans = useMemo(
@@ -280,6 +310,17 @@ const RetailersPage = () => {
                               Reset login
                             </button>
                             <button
+                              onClick={() => {
+                                setCustomPassword('');
+                                setPasswordError(null);
+                                setPasswordModal({ retailerId: retailer.id, retailerName: retailer.shopName });
+                              }}
+                              disabled={resetPasswordMutation.isPending}
+                              className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Custom password
+                            </button>
+                            <button
                               onClick={() => handleToggleStatus(retailer)}
                               disabled={toggleStatusMutation.isPending}
                               className={`text-xs font-semibold ${
@@ -321,6 +362,40 @@ const RetailersPage = () => {
             onSubmit={(planId) => assignPlanMutation.mutate({ retailerId: assignRetailerId, planId })}
             error={assignPlanMutation.error?.message}
           />
+        </RetailerModal>
+      ) : null}
+
+      {passwordModal ? (
+        <RetailerModal
+          onClose={() => {
+            setPasswordModal(null);
+            setCustomPassword('');
+            setPasswordError(null);
+          }}
+          title={`Custom password • ${passwordModal.retailerName}`}
+        >
+          <form className="space-y-4" onSubmit={handleCustomPasswordSubmit}>
+            <label className="text-sm font-medium text-slate-600">
+              New password
+              <input
+                type="text"
+                value={customPassword}
+                minLength={8}
+                onChange={(event) => setCustomPassword(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
+                placeholder="Minimum 8 characters"
+              />
+            </label>
+            <p className="text-xs text-slate-500">Share securely with the retailer admin once saved.</p>
+            {passwordError ? <p className="text-sm text-red-500">{passwordError}</p> : null}
+            <button
+              type="submit"
+              disabled={resetPasswordMutation.isPending}
+              className="w-full rounded-md bg-[color:var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {resetPasswordMutation.isPending ? 'Saving...' : 'Save password'}
+            </button>
+          </form>
         </RetailerModal>
       ) : null}
     </div>

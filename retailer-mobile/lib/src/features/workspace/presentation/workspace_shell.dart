@@ -115,67 +115,94 @@ class _Header extends ConsumerWidget {
     final themeMode = ref.watch(themeControllerProvider);
     final language = ref.watch(languageControllerProvider);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 24,
-                    backgroundColor: Color(0xFF1E293B),
-                    child: Icon(Icons.store_rounded, color: Colors.white),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Selfcheckout POS',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              letterSpacing: 0.6,
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
+    const brandColor = Color(0xFFD00000);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            brandColor.withValues(alpha: 0.18),
+            Colors.transparent,
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: brandColor,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: brandColor.withValues(alpha: 0.35),
+                            blurRadius: 22,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
                       ),
-                      Text(
-                        user?.name ?? 'Retailer',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      child: Image.asset(
+                        'assets/brand/selfpayout_logo.png',
+                        height: 28,
+                        fit: BoxFit.contain,
                       ),
-                    ],
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Toggle theme',
-                    onPressed: () => ref.read(themeControllerProvider.notifier).toggle(),
-                    icon: Icon(themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
-                  ),
-                  TextButton(
-                    onPressed: () => ref.read(languageControllerProvider.notifier).toggle(),
-                    child: Text(language.toggleLabel),
-                  ),
-                  TextButton(
-                    onPressed: () => ref.read(authControllerProvider.notifier).logout(),
-                    child: const Text('Logout'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '${strings.label(TranslationKey.welcome)}, ${user?.name ?? 'Retailer'}!',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          const Text('Quick billing, customer tracking, and offline-ready workflows.'),
-        ],
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SelfPayout POS',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                letterSpacing: 0.6,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                        ),
+                        Text(
+                          user?.name ?? 'Retailer',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Toggle theme',
+                      onPressed: () => ref.read(themeControllerProvider.notifier).toggle(),
+                      icon: Icon(themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
+                    ),
+                    TextButton(
+                      onPressed: () => ref.read(languageControllerProvider.notifier).toggle(),
+                      child: Text(language.toggleLabel),
+                    ),
+                    TextButton(
+                      onPressed: () => ref.read(authControllerProvider.notifier).logout(),
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '${strings.label(TranslationKey.welcome)}, ${user?.name ?? 'Retailer'}!',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            const Text('Quick billing, customer tracking, and offline-ready workflows.'),
+          ],
+        ),
       ),
     );
   }

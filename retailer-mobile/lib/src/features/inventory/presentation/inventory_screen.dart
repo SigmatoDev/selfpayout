@@ -1,9 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 
 import '../../../core/di/providers.dart';
 import '../../../core/network/api_client.dart';
@@ -11,6 +15,8 @@ import '../../../models/models.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../../workspace/workspace_providers.dart';
 import '../utils/inventory_csv_parser.dart';
+import 'barcode_scanner_sheet.dart';
+import 'inventory_edit_sheet.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
@@ -29,14 +35,18 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   final _stockController = TextEditingController(text: '0');
   final _unitController = TextEditingController(text: 'pcs');
   final _barcodeController = TextEditingController();
+  final GlobalKey _barcodePreviewKey = GlobalKey();
 
   bool _showForm = false;
   bool _isSubmitting = false;
+  bool _isSavingBarcode = false;
   List<InventoryItemRequest> _bulkItems = [];
   String? _bulkFileName;
   String? _bulkFeedback;
   bool _bulkUploading = false;
   bool _bulkSuccess = false;
+  String? _barcodeStatusMessage;
+  bool _barcodeStatusSuccess = false;
 
   @override
   void dispose() {
@@ -60,6 +70,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     if (user?.retailerId == null) {
       return const Center(child: Text('Retailer ID missing. Complete setup to manage inventory.'));
     }
+    final retailerId = user!.retailerId!;
 
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(inventoryProvider),
@@ -68,11 +79,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         padding: const EdgeInsets.only(bottom: 120),
         children: [
           _buildToolbar(),
-          if (_showForm) _buildCreateForm(user!.retailerId!),
-          _buildBulkCard(user!.retailerId!),
+          if (_showForm) _buildCreateForm(retailerId),
+          _buildBulkCard(retailerId),
           const SizedBox(height: 16),
           inventoryAsync.when(
-            data: (items) => _buildInventoryList(items),
+            data: (items) => _buildInventoryList(items, retailerId),
             loading: () => const Center(child: Padding(
               padding: EdgeInsets.all(24.0),
               child: CircularProgressIndicator(),
@@ -135,7 +146,78 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 _buildField(_taxController, 'Tax %', keyboardType: TextInputType.number),
                 _buildField(_stockController, 'Stock qty', keyboardType: TextInputType.number),
                 _buildField(_unitController, 'Unit'),
-                _buildField(_barcodeController, 'Barcode (optional)'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildField(
+                      _barcodeController,
+                      'Barcode (optional)',
+                      onChanged: (_) => setState(() {}),
+                      suffixIcon: IconButton(
+                        tooltip: 'Scan barcode',
+                        onPressed: () => _scanIntoController(_barcodeController),
+                        icon: const Icon(Icons.qr_code_scanner),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _generateBarcodeValue,
+                          icon: const Icon(Icons.auto_awesome),
+                          label: const Text('Generate'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed:
+                              _barcodeController.text.trim().isEmpty || _isSavingBarcode ? null : _saveBarcodeImage,
+                          icon: _isSavingBarcode
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.print),
+                          label: Text(_isSavingBarcode ? 'Saving...' : 'Save barcode'),
+                        ),
+                      ],
+                    ),
+                    if (_barcodeController.text.trim().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      RepaintBoundary(
+                        key: _barcodePreviewKey,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                            color: Colors.white,
+                          ),
+                          child: BarcodeWidget(
+                            barcode: Barcode.code128(),
+                            data: _barcodeController.text.trim(),
+                            drawText: true,
+                            color: Theme.of(context).colorScheme.primary,
+                            height: 80,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (_barcodeStatusMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          _barcodeStatusMessage!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _barcodeStatusSuccess ? Colors.green : Colors.redAccent,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -208,7 +290,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     );
   }
 
-  Widget _buildInventoryList(List<InventoryItem> items) {
+  Widget _buildInventoryList(List<InventoryItem> items, String retailerId) {
     final query = _searchController.text.trim().toLowerCase();
     final filtered = query.isEmpty
         ? items
@@ -237,7 +319,22 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           tileColor: Theme.of(context).cardColor,
           title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text('SKU ${item.sku} • Stock ${item.stockQuantity} • Tax ${item.taxPercentage}%'),
-          trailing: Text('₹${item.price.toStringAsFixed(2)}'),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('₹${item.price.toStringAsFixed(2)}'),
+              IconButton(
+                onPressed: () => _openEditSheet(retailerId, item),
+                tooltip: 'Edit item',
+                iconSize: 20,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            ],
+          ),
+          onTap: () => _openEditSheet(retailerId, item),
         );
       },
       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -249,11 +346,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     TextEditingController controller,
     String label, {
     TextInputType keyboardType = TextInputType.text,
+    Widget? suffixIcon,
+    ValueChanged<String>? onChanged,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(labelText: label, suffixIcon: suffixIcon),
+      onChanged: onChanged,
     );
   }
 
@@ -367,6 +467,108 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         _bulkUploading = false;
         _bulkFeedback = error.message;
         _bulkSuccess = false;
+      });
+    }
+  }
+
+  Future<void> _scanIntoController(TextEditingController controller) async {
+    final code = await showBarcodeScannerSheet(context);
+    if (code != null) {
+      setState(() {
+        controller.text = code;
+      });
+    }
+  }
+
+  Future<void> _openEditSheet(String retailerId, InventoryItem item) async {
+    final updatedRequest = await showModalBottomSheet<InventoryItemRequest>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => InventoryEditSheet(item: item),
+    );
+    if (updatedRequest == null) return;
+
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await ref.read(retailerApiProvider).createInventoryItem(retailerId, updatedRequest);
+      ref.invalidate(inventoryProvider);
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text('Inventory item updated')));
+      }
+    } on ApiException catch (error) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (navigator.mounted) {
+        navigator.pop();
+      }
+    }
+  }
+
+  void _generateBarcodeValue() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    setState(() {
+      _barcodeController.text = 'SC$timestamp';
+      _barcodeStatusMessage = 'Barcode generated. Save or print as needed.';
+      _barcodeStatusSuccess = true;
+    });
+  }
+
+  Future<void> _saveBarcodeImage() async {
+    final code = _barcodeController.text.trim();
+    if (code.isEmpty) {
+      setState(() {
+        _barcodeStatusMessage = 'Enter or generate a barcode first.';
+        _barcodeStatusSuccess = false;
+      });
+      return;
+    }
+
+    final boundary = _barcodePreviewKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      setState(() {
+        _barcodeStatusMessage = 'Barcode preview not ready. Try again.';
+        _barcodeStatusSuccess = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSavingBarcode = true;
+      _barcodeStatusMessage = null;
+    });
+
+    try {
+      final image = await boundary.toImage(pixelRatio: 3);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = byteData!.buffer.asUint8List();
+      final directory = await getApplicationDocumentsDirectory();
+      final folder = Directory('${directory.path}/barcodes');
+      await folder.create(recursive: true);
+      final safeCode = code.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final file =
+          File('${folder.path}/$safeCode-${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(bytes);
+      if (!mounted) return;
+      setState(() {
+        _isSavingBarcode = false;
+        _barcodeStatusMessage = 'Barcode saved to ${file.path}';
+        _barcodeStatusSuccess = true;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSavingBarcode = false;
+        _barcodeStatusMessage = 'Failed to save barcode: $error';
+        _barcodeStatusSuccess = false;
       });
     }
   }

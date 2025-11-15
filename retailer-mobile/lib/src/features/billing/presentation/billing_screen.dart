@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -8,6 +10,7 @@ import '../../../core/network/api_client.dart';
 import '../../../models/models.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../../workspace/workspace_providers.dart';
+import '../../inventory/presentation/barcode_scanner_sheet.dart';
 
 class BillingScreen extends ConsumerStatefulWidget {
   const BillingScreen({super.key});
@@ -68,14 +71,24 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 labelText: 'Scan barcode or search item',
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Scan barcode',
+                      icon: const Icon(Icons.qr_code_scanner),
+                      onPressed: _handleScanBarcode,
+                    ),
+                    if (_searchController.text.isNotEmpty)
+                      IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => setState(() {
                           _searchController.clear();
                         }),
                       ),
+                  ],
+                ),
+                suffixIconConstraints: const BoxConstraints(minHeight: 0, minWidth: 0),
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -291,15 +304,157 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     );
   }
 
+  Future<void> _handleScanBarcode() async {
+    final code = await showBarcodeScannerSheet(context);
+    if (code == null) return;
+    final normalized = code.trim();
+    setState(() {
+      _searchController.text = normalized;
+    });
+
+    final inventory = ref.read(inventoryProvider).valueOrNull;
+    InventoryItem? match;
+    if (inventory != null) {
+      for (final item in inventory) {
+        final barcode = item.barcode?.trim();
+        if (barcode != null && barcode == normalized) {
+          match = item;
+          break;
+        }
+      }
+    }
+
+    if (match != null) {
+      _addToCart(match);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added ${match.name} to cart')),
+      );
+    } else if (mounted) {
+      final externalItem = _cartItemFromBarcodeData(normalized);
+      if (externalItem != null) {
+        _addCustomCartItem(externalItem);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Added ${externalItem.name} from barcode data')),
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No item found for barcode $normalized')),
+        );
+      }
+    }
+  }
+
   List<InventoryItem> _filteredInventory(List<InventoryItem> all) {
     final term = _searchController.text.trim().toLowerCase();
     if (term.isEmpty) {
       return all.take(8).toList();
     }
     return all
-        .where((item) => item.name.toLowerCase().contains(term) || item.sku.toLowerCase().contains(term))
+        .where((item) {
+          final barcode = item.barcode?.toLowerCase();
+          return item.name.toLowerCase().contains(term) ||
+              item.sku.toLowerCase().contains(term) ||
+              (barcode != null && barcode.contains(term));
+        })
         .take(8)
         .toList();
+  }
+
+  void _addCustomCartItem(_CartItem newItem) {
+    setState(() {
+      final existing = _cart.indexWhere((cartItem) => cartItem.sku == newItem.sku);
+      if (existing >= 0) {
+        _cart[existing] = _cart[existing].copyWith(
+          quantity: _cart[existing].quantity + newItem.quantity,
+          price: newItem.price,
+        );
+      } else {
+        _cart.add(newItem);
+      }
+    });
+  }
+
+  _CartItem? _cartItemFromBarcodeData(String raw) {
+    if (raw.isEmpty) return null;
+
+    final jsonItem = _cartItemFromJson(raw);
+    if (jsonItem != null) return jsonItem;
+
+    final pipeItem = _cartItemFromDelimited(raw, delimiter: '|');
+    if (pipeItem != null) return pipeItem;
+
+    final commaItem = _cartItemFromDelimited(raw, delimiter: ',');
+    if (commaItem != null) return commaItem;
+
+    final numericPrice = double.tryParse(raw);
+    if (numericPrice != null) {
+      return _CartItem(
+        sku: raw,
+        name: 'Barcode item',
+        price: numericPrice,
+        quantity: 1,
+        taxPercentage: 0,
+      );
+    }
+
+    return null;
+  }
+
+  _CartItem? _cartItemFromJson(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      final price = _coerceToDouble(decoded['price']);
+      if (price == null) return null;
+      final sku = (decoded['sku'] as String?)?.trim().isNotEmpty == true ? decoded['sku'].toString() : raw;
+      final name = (decoded['name'] as String?)?.trim().isNotEmpty == true ? decoded['name'].toString() : 'Barcode item';
+      final parsedQuantity = (decoded['quantity'] as num?)?.toInt() ?? 1;
+      final quantity = parsedQuantity < 1
+          ? 1
+          : parsedQuantity > 999
+              ? 999
+              : parsedQuantity;
+      final tax = _coerceToDouble(decoded['tax']) ?? 0;
+
+      return _CartItem(sku: sku, name: name, price: price, quantity: quantity, taxPercentage: tax);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _CartItem? _cartItemFromDelimited(String raw, {required String delimiter}) {
+    if (!raw.contains(delimiter)) return null;
+    final parts = raw.split(delimiter).map((part) => part.trim()).where((element) => element.isNotEmpty).toList();
+    if (parts.length < 2) return null;
+    final price = double.tryParse(parts.last);
+    if (price == null) return null;
+
+    String sku;
+    String name;
+    if (parts.length >= 3) {
+      sku = parts[0];
+      name = parts[1];
+    } else {
+      sku = parts[0];
+      name = parts[0];
+    }
+
+    return _CartItem(
+      sku: sku,
+      name: name,
+      price: price,
+      quantity: 1,
+      taxPercentage: 0,
+    );
+  }
+
+  double? _coerceToDouble(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is num) return raw.toDouble();
+    return double.tryParse(raw.toString());
   }
 
   void _addToCart(InventoryItem item) {

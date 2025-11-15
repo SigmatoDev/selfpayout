@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
+import { uploadObject } from '../../lib/storage';
 import type { RetailerCreateInput, RetailerSignupInput, RetailerUpdateInput } from './retailer.schema';
 
 const TEMP_PASSWORD_BYTES = 9;
@@ -15,6 +16,38 @@ const generateTemporaryPassword = () => {
 };
 
 const hashPassword = async (plaintext: string) => bcrypt.hash(plaintext, BCRYPT_ROUNDS);
+const slugify = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'retailer';
+
+const persistSignupDocument = async (
+  shopName: string,
+  type: 'aadhar' | 'pan',
+  file: RetailerSignupInput['documents']['aadhar']
+) => {
+  const buffer = Buffer.from(file.data, 'base64');
+  const extensionMatch = file.fileName.match(/\\.([a-zA-Z0-9]+)$/);
+  const extension = extensionMatch ? `.${extensionMatch[1].toLowerCase()}` : '';
+  const filename = `${type}-${Date.now()}${extension}`;
+  const result = await uploadObject({
+    buffer,
+    filename,
+    prefix: `uploads/${slugify(shopName)}`,
+    contentType: file.contentType
+  });
+
+  return {
+    storageKey: result.key,
+    storageProvider: result.provider,
+    location: result.location,
+    originalName: file.fileName,
+    contentType: file.contentType,
+    size: buffer.byteLength
+  };
+};
 
 export const listRetailers = async (params: { status?: string; search?: string }) => {
   const { status, search } = params;
@@ -96,6 +129,11 @@ export const submitRetailerOnboarding = async (input: RetailerSignupInput) => {
     throw error;
   }
 
+  const [aadharFile, panFile] = await Promise.all([
+    persistSignupDocument(input.shopName, 'aadhar', input.documents.aadhar),
+    persistSignupDocument(input.shopName, 'pan', input.documents.pan)
+  ]);
+
   const retailer = await (prisma.retailer as any).create({
     data: {
       name: input.ownerName,
@@ -114,11 +152,11 @@ export const submitRetailerOnboarding = async (input: RetailerSignupInput) => {
           documents: {
             aadhar: {
               number: input.aadharNumber,
-              file: input.documents.aadhar
+              file: aadharFile
             },
             pan: {
               number: input.panNumber,
-              file: input.documents.pan
+              file: panFile
             }
           }
         }

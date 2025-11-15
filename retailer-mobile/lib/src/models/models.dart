@@ -447,7 +447,6 @@ class SignupPayload {
     required this.aadharNumber,
     required this.panNumber,
     this.gstNumber,
-    this.subscriptionPlanId,
     this.documents = const <String, DocumentUpload>{},
   });
 
@@ -459,7 +458,6 @@ class SignupPayload {
   final bool gstEnabled;
   final String languagePreference;
   final String? gstNumber;
-  final String? subscriptionPlanId;
   final String aadharNumber;
   final String panNumber;
   final Map<String, DocumentUpload> documents;
@@ -473,7 +471,6 @@ class SignupPayload {
         'gstEnabled': gstEnabled,
         'gstNumber': gstEnabled ? gstNumber : null,
         'languagePreference': languagePreference,
-        'subscriptionPlanId': subscriptionPlanId,
         'aadharNumber': aadharNumber,
         'panNumber': panNumber,
         'documents': documents.map((key, value) => MapEntry(key, value.toJson())),
