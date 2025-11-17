@@ -22,3 +22,11 @@ export const upsertCustomer = async (input: CustomerInput) => {
     create: input
   });
 };
+
+export const fetchCustomerHistory = (retailerId: string, customerId: string) =>
+  prisma.invoice.findMany({
+    where: { retailerId, customerId },
+    include: { items: true },
+    orderBy: { createdAt: 'desc' },
+    take: 20
+  });

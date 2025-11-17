@@ -1,12 +1,19 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../models/models.dart';
 import 'barcode_scanner_sheet.dart';
 
 class InventoryEditSheet extends StatefulWidget {
-  const InventoryEditSheet({super.key, required this.item});
+  const InventoryEditSheet({super.key, required this.item, this.initialCategory});
 
   final InventoryItem item;
+  final String? initialCategory;
 
   @override
   State<InventoryEditSheet> createState() => _InventoryEditSheetState();
@@ -26,6 +33,12 @@ class _InventoryEditSheetState extends State<InventoryEditSheet> {
       TextEditingController(text: widget.item.stockQuantity.toString());
   late final TextEditingController _unitController = TextEditingController(text: widget.item.unit ?? 'pcs');
   late final TextEditingController _barcodeController = TextEditingController(text: widget.item.barcode ?? '');
+  late final TextEditingController _categoryController =
+      TextEditingController(text: widget.initialCategory ?? widget.item.category ?? '');
+  final GlobalKey _barcodePreviewKey = GlobalKey();
+  bool _isSavingBarcode = false;
+  String? _barcodeStatusMessage;
+  bool _barcodeStatusSuccess = false;
 
   @override
   void dispose() {
@@ -37,6 +50,7 @@ class _InventoryEditSheetState extends State<InventoryEditSheet> {
     _stockController.dispose();
     _unitController.dispose();
     _barcodeController.dispose();
+    _categoryController.dispose();
     super.dispose();
   }
 
@@ -55,6 +69,7 @@ class _InventoryEditSheetState extends State<InventoryEditSheet> {
       stockQuantity: stock,
       unit: _unitController.text.trim().isEmpty ? 'pcs' : _unitController.text.trim(),
       barcode: _barcodeController.text.trim().isEmpty ? null : _barcodeController.text.trim(),
+      category: _categoryController.text.trim().isEmpty ? null : _categoryController.text.trim(),
     );
     Navigator.of(context).pop(request);
   }
@@ -64,6 +79,63 @@ class _InventoryEditSheetState extends State<InventoryEditSheet> {
     if (code != null) {
       setState(() {
         _barcodeController.text = code;
+        _barcodeStatusMessage = null;
+      });
+    }
+  }
+
+  void _generateBarcode() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    setState(() {
+      _barcodeController.text = 'SC$timestamp';
+      _barcodeStatusMessage = 'Barcode generated.';
+      _barcodeStatusSuccess = true;
+    });
+  }
+
+  Future<void> _saveBarcodeImage() async {
+    final code = _barcodeController.text.trim();
+    if (code.isEmpty) {
+      setState(() {
+        _barcodeStatusMessage = 'Enter or scan a barcode first.';
+        _barcodeStatusSuccess = false;
+      });
+      return;
+    }
+    final boundary = _barcodePreviewKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      setState(() {
+        _barcodeStatusMessage = 'Barcode preview not ready.';
+        _barcodeStatusSuccess = false;
+      });
+      return;
+    }
+    setState(() {
+      _isSavingBarcode = true;
+      _barcodeStatusMessage = null;
+    });
+    try {
+      final image = await boundary.toImage(pixelRatio: 3);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = byteData!.buffer.asUint8List();
+      final dir = await getApplicationDocumentsDirectory();
+      final folder = Directory('${dir.path}/barcodes');
+      await folder.create(recursive: true);
+      final safeCode = code.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final file = File('${folder.path}/$safeCode-${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(bytes);
+      if (!mounted) return;
+      setState(() {
+        _isSavingBarcode = false;
+        _barcodeStatusMessage = 'Saved barcode to ${file.path}';
+        _barcodeStatusSuccess = true;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSavingBarcode = false;
+        _barcodeStatusMessage = 'Failed to save barcode: $error';
+        _barcodeStatusSuccess = false;
       });
     }
   }
@@ -106,12 +178,12 @@ class _InventoryEditSheetState extends State<InventoryEditSheet> {
                     children: [
                       Expanded(
                         child: _buildTextField(
-                          _priceController,
-                          'Price',
-                          keyboardType: TextInputType.number,
-                          validator: _numberValidator,
-                        ),
-                      ),
+                      _priceController,
+                      'Price',
+                      keyboardType: TextInputType.number,
+                      validator: _numberValidator,
+                    ),
+                  ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: _buildTextField(
@@ -148,15 +220,80 @@ class _InventoryEditSheetState extends State<InventoryEditSheet> {
                   const SizedBox(height: 12),
                   _buildTextField(_unitController, 'Unit', validator: _requiredValidator),
                   const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _barcodeController,
-                    decoration: InputDecoration(
-                      labelText: 'Barcode',
-                      suffixIcon: IconButton(
-                        onPressed: _scanBarcode,
-                        icon: const Icon(Icons.qr_code_scanner),
+                  _buildTextField(_categoryController, 'Category (optional)'),
+                  const SizedBox(height: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: _barcodeController,
+                        decoration: InputDecoration(
+                          labelText: 'Barcode',
+                          suffixIcon: IconButton(
+                            onPressed: _scanBarcode,
+                            icon: const Icon(Icons.qr_code_scanner),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _generateBarcode,
+                            icon: const Icon(Icons.auto_awesome),
+                            label: const Text('Generate'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _barcodeController.text.trim().isEmpty || _isSavingBarcode
+                                ? null
+                                : _saveBarcodeImage,
+                            icon: _isSavingBarcode
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.print),
+                            label: Text(_isSavingBarcode ? 'Saving...' : 'Save barcode'),
+                          ),
+                        ],
+                      ),
+                      if (_barcodeController.text.trim().isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        RepaintBoundary(
+                          key: _barcodePreviewKey,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                              color: Colors.white,
+                            ),
+                            child: BarcodeWidget(
+                              barcode: Barcode.code128(),
+                              data: _barcodeController.text.trim(),
+                              drawText: true,
+                              color: Theme.of(context).colorScheme.primary,
+                              height: 80,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (_barcodeStatusMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            _barcodeStatusMessage!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _barcodeStatusSuccess ? Colors.green : Colors.redAccent,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
@@ -181,12 +318,14 @@ class _InventoryEditSheetState extends State<InventoryEditSheet> {
     String label, {
     String? Function(String?)? validator,
     TextInputType? keyboardType,
+    ValueChanged<String>? onChanged,
   }) {
     return TextFormField(
       controller: controller,
       decoration: InputDecoration(labelText: label),
       validator: validator,
       keyboardType: keyboardType,
+      onChanged: onChanged,
     );
   }
 

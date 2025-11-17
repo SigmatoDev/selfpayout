@@ -35,6 +35,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   final _stockController = TextEditingController(text: '0');
   final _unitController = TextEditingController(text: 'pcs');
   final _barcodeController = TextEditingController();
+  final _categoryController = TextEditingController();
   final GlobalKey _barcodePreviewKey = GlobalKey();
 
   bool _showForm = false;
@@ -59,12 +60,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     _stockController.dispose();
     _unitController.dispose();
     _barcodeController.dispose();
+    _categoryController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final inventoryAsync = ref.watch(inventoryProvider);
+    final availableCategories = _availableCategories(inventoryAsync.valueOrNull);
     final user = ref.watch(authControllerProvider).valueOrNull;
 
     if (user?.retailerId == null) {
@@ -76,18 +79,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       onRefresh: () async => ref.invalidate(inventoryProvider),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 8).copyWith(bottom: 120),
         children: [
           _buildToolbar(),
-          if (_showForm) _buildCreateForm(retailerId),
+          if (_showForm) _buildCreateForm(retailerId, availableCategories),
           _buildBulkCard(retailerId),
           const SizedBox(height: 16),
           inventoryAsync.when(
             data: (items) => _buildInventoryList(items, retailerId),
-            loading: () => const Center(child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: CircularProgressIndicator(),
-            )),
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(),
+              ),
+            ),
             error: (error, _) => Padding(
               padding: const EdgeInsets.all(16),
               child: Text(error.toString(), style: const TextStyle(color: Colors.redAccent)),
@@ -100,7 +105,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
   Widget _buildToolbar() {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       child: Row(
         children: [
           Expanded(
@@ -121,24 +126,44 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     );
   }
 
-  Widget _buildCreateForm(String retailerId) {
+  Widget _buildCreateForm(String retailerId, List<String> categorySuggestions) {
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('New inventory item', style: Theme.of(context).textTheme.titleMedium),
+            if (categorySuggestions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: categorySuggestions
+                    .map(
+                      (category) => InputChip(
+                        label: Text(category),
+                        onSelected: (_) => setState(() => _categoryController.text = category),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
             const SizedBox(height: 16),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 2.8,
-              children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 640;
+                final crossAxisCount = isWide ? 2 : 1;
+                final aspectRatio = isWide ? 3.2 : 4.2;
+                return GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: aspectRatio,
+                  children: [
                 _buildField(_skuController, 'SKU'),
                 _buildField(_nameController, 'Name'),
                 _buildField(_priceController, 'Price', keyboardType: TextInputType.number),
@@ -146,6 +171,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 _buildField(_taxController, 'Tax %', keyboardType: TextInputType.number),
                 _buildField(_stockController, 'Stock qty', keyboardType: TextInputType.number),
                 _buildField(_unitController, 'Unit'),
+                _buildField(_categoryController, 'Category (optional)'),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -218,7 +244,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                       ),
                   ],
                 ),
-              ],
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 16),
             Align(
@@ -238,9 +266,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
   Widget _buildBulkCard(String retailerId) {
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -296,9 +324,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         ? items
         : items
             .where(
-              (item) => item.name.toLowerCase().contains(query) || item.sku.toLowerCase().contains(query),
+              (item) =>
+                  item.name.toLowerCase().contains(query) ||
+                  item.sku.toLowerCase().contains(query) ||
+                  (item.category?.toLowerCase().contains(query) ?? false),
             )
             .toList();
+    final grouped = _groupInventoryByCategory(filtered);
 
     if (filtered.isEmpty) {
       return const Padding(
@@ -307,38 +339,57 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       );
     }
 
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemBuilder: (context, index) {
-        final item = filtered[index];
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          tileColor: Theme.of(context).cardColor,
-          title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text('SKU ${item.sku} • Stock ${item.stockQuantity} • Tax ${item.taxPercentage}%'),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: grouped.map((entry) {
+        final category = entry.key;
+        final sectionItems = entry.value;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('₹${item.price.toStringAsFixed(2)}'),
-              IconButton(
-                onPressed: () => _openEditSheet(retailerId, item),
-                tooltip: 'Edit item',
-                iconSize: 20,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                icon: const Icon(Icons.edit_outlined),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text(category, style: Theme.of(context).textTheme.titleMedium),
+              ),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemBuilder: (context, index) {
+                  final item = sectionItems[index];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    tileColor: Theme.of(context).cardColor,
+                    title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text('SKU ${item.sku} • Stock ${item.stockQuantity} • Tax ${item.taxPercentage}%'),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('₹${item.price.toStringAsFixed(2)}'),
+                        IconButton(
+                          onPressed: () => _openEditSheet(retailerId, item),
+                          tooltip: 'Edit item',
+                          iconSize: 20,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                      ],
+                    ),
+                    onTap: () => _openEditSheet(retailerId, item),
+                  );
+                },
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemCount: sectionItems.length,
               ),
             ],
           ),
-          onTap: () => _openEditSheet(retailerId, item),
         );
-      },
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemCount: filtered.length,
+      }).toList(),
     );
   }
 
@@ -383,6 +434,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0,
         unit: _unitController.text.trim().isEmpty ? 'pcs' : _unitController.text.trim(),
         barcode: _barcodeController.text.trim().isEmpty ? null : _barcodeController.text.trim(),
+        category: _categoryController.text.trim().isEmpty ? null : _categoryController.text.trim(),
       );
       await ref.read(retailerApiProvider).createInventoryItem(retailerId, request);
       if (mounted) {
@@ -393,6 +445,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           _priceController.clear();
           _mrpController.clear();
           _barcodeController.clear();
+          _categoryController.clear();
           _bulkFeedback = 'Item created successfully.';
           _bulkSuccess = true;
         });
@@ -485,7 +538,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => InventoryEditSheet(item: item),
+      builder: (_) => InventoryEditSheet(item: item, initialCategory: item.category),
     );
     if (updatedRequest == null) return;
 
@@ -571,5 +624,28 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         _barcodeStatusSuccess = false;
       });
     }
+  }
+
+  List<String> _availableCategories(List<InventoryItem>? items) {
+    if (items == null) return [];
+    final set = <String>{};
+    for (final item in items) {
+      final category = item.category?.trim();
+      if (category != null && category.isNotEmpty) {
+        set.add(category);
+      }
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  List<MapEntry<String, List<InventoryItem>>> _groupInventoryByCategory(List<InventoryItem> items) {
+    final buckets = <String, List<InventoryItem>>{};
+    for (final item in items) {
+      final key = (item.category?.trim().isNotEmpty ?? false) ? item.category!.trim() : 'Uncategorized';
+      buckets.putIfAbsent(key, () => []).add(item);
+    }
+    final keys = buckets.keys.toList()..sort();
+    return keys.map((key) => MapEntry(key, buckets[key]!)).toList();
   }
 }

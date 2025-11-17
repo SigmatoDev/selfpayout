@@ -146,6 +146,7 @@ model InventoryItem {
   retailerId   String
   sku          String
   name         String
+  category     String?
   price        Float
   mrp          Float?
   taxPercentage Float   @default(0)

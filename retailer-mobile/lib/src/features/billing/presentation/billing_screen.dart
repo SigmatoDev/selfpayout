@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -28,31 +29,42 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   bool _isSubmitting = false;
   InvoiceResult? _lastInvoice;
   String? _statusMessage;
+  Customer? _selectedCustomer;
+
+  @override
+  void initState() {
+    super.initState();
+    _customerPhoneController.addListener(_handleCustomerLookup);
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _customerPhoneController.dispose();
+    _customerPhoneController
+      ..removeListener(_handleCustomerLookup)
+      ..dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final inventoryAsync = ref.watch(inventoryProvider);
+    final customersAsync = ref.watch(customersProvider);
     final strings = ref.watch(languageStringsProvider);
     final offlineQueue = ref.watch(offlineQueueControllerProvider);
+    final categoryMap = _groupInventoryByCategory(inventoryAsync.valueOrNull ?? []);
 
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(inventoryProvider),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 8).copyWith(bottom: 120),
         children: [
-          _buildSearchBar(inventoryAsync, strings),
+          _buildSearchBar(inventoryAsync, strings, categoryMap),
           const SizedBox(height: 16),
           _buildCartSection(strings),
           const SizedBox(height: 16),
-          _buildPaymentSection(),
+          _buildPaymentSection(customersAsync),
           const SizedBox(height: 16),
           _buildTotalsSection(strings, offlineQueue.length),
         ],
@@ -60,13 +72,36 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     );
   }
 
-  Widget _buildSearchBar(AsyncValue<List<InventoryItem>> inventoryAsync, LanguageStrings strings) {
+  Widget _buildSearchBar(
+    AsyncValue<List<InventoryItem>> inventoryAsync,
+    LanguageStrings strings,
+    Map<String, List<InventoryItem>> categoryMap,
+  ) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (categoryMap.isNotEmpty) ...[
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: categoryMap.entries
+                      .map(
+                        (entry) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ActionChip(
+                            label: Text(entry.key),
+                            onPressed: () => _openCategoryPicker(entry.key, entry.value),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ],
             TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -140,7 +175,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   Widget _buildCartSection(LanguageStrings strings) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -204,10 +239,10 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     );
   }
 
-  Widget _buildPaymentSection() {
+  Widget _buildPaymentSection(AsyncValue<List<Customer>> customersAsync) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -215,6 +250,37 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               controller: _customerPhoneController,
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(labelText: 'Customer phone (optional)'),
+            ),
+            const SizedBox(height: 8),
+            customersAsync.when(
+              data: (_) => const SizedBox.shrink(),
+              loading: () => const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text('Loading customers...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+              error: (error, _) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  error.toString(),
+                  style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+                ),
+              ),
+            ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _selectedCustomer != null
+                  ? ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.person),
+                      title: Text(_selectedCustomer!.name),
+                      subtitle: Text(_selectedCustomer!.phone),
+                    )
+                  : (_customerPhoneController.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : const Text(
+                          'No customer found with this phone.',
+                          style: TextStyle(fontSize: 12, color: Colors.redAccent),
+                        )),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<PaymentMode>(
@@ -239,7 +305,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     final totals = _calculateTotals();
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -249,11 +315,20 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
             _buildTotalRow('Total', totals.total, isEmphasis: true),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _cart.isEmpty || _isSubmitting ? null : _handleCollectPayment,
+              onPressed:
+                  _cart.isEmpty || _isSubmitting || _selectedCustomer == null ? null : _handleCollectPayment,
               child: _isSubmitting
                   ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                   : Text(strings.label(TranslationKey.collectPayment)),
             ),
+            if (_selectedCustomer == null)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Enter a known customer phone to continue.',
+                  style: TextStyle(fontSize: 12, color: Colors.redAccent),
+                ),
+              ),
             if (_statusMessage != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -345,6 +420,74 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
         );
       }
     }
+  }
+
+  void _handleCustomerLookup() {
+    final phone = _customerPhoneController.text.trim();
+    final customers = ref.read(customersProvider).valueOrNull ?? [];
+    final match = customers.firstWhereOrNull((customer) => customer.phone == phone);
+    setState(() {
+      _selectedCustomer = match;
+    });
+  }
+
+  void _openCategoryPicker(String category, List<InventoryItem> items) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.8,
+          builder: (context, controller) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('$category items', style: Theme.of(context).textTheme.titleMedium),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: ListView.separated(
+                      controller: controller,
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return ListTile(
+                          title: Text(item.name),
+                          subtitle: Text('₹${item.price.toStringAsFixed(2)}'),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              _addToCart(item);
+                              Navigator.of(context).pop();
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   List<InventoryItem> _filteredInventory(List<InventoryItem> all) {
@@ -457,6 +600,15 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     return double.tryParse(raw.toString());
   }
 
+  Map<String, List<InventoryItem>> _groupInventoryByCategory(List<InventoryItem> items) {
+    final map = <String, List<InventoryItem>>{};
+    for (final item in items) {
+      final key = (item.category?.isNotEmpty ?? false) ? item.category!.trim() : 'All items';
+      map.putIfAbsent(key, () => []).add(item);
+    }
+    return map;
+  }
+
   void _addToCart(InventoryItem item) {
     setState(() {
       final existing = _cart.indexWhere((cartItem) => cartItem.sku == item.sku);
@@ -513,7 +665,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   }
 
   Future<void> _handleCollectPayment() async {
-    if (_cart.isEmpty) return;
+    if (_cart.isEmpty || _selectedCustomer == null) return;
     setState(() {
       _isSubmitting = true;
       _statusMessage = null;
@@ -521,7 +673,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
     final payload = CreateInvoicePayload(
       paymentMode: _paymentMode,
-      customerPhone: _customerPhoneController.text.trim().isEmpty ? null : _customerPhoneController.text.trim(),
+      customerPhone: _selectedCustomer?.phone,
       items: _cart
           .map(
             (item) => InvoiceItemPayload(

@@ -7,6 +7,7 @@ import '../../../models/models.dart';
 class AuthController extends AsyncNotifier<CurrentUser?> {
   @override
   Future<CurrentUser?> build() async {
+    ref.keepAlive();
     final tokenStorage = ref.watch(tokenStorageProvider);
     if (!tokenStorage.hasToken) {
       return null;

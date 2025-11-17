@@ -5,6 +5,9 @@ import '../../../core/network/api_client.dart';
 import '../../../models/models.dart';
 import '../../workspace/workspace_providers.dart';
 import '../../../core/di/providers.dart';
+import 'customer_detail_page.dart';
+
+enum _CustomerFilter { all, outstanding, settled }
 
 class CustomersScreen extends ConsumerStatefulWidget {
   const CustomersScreen({super.key});
@@ -17,6 +20,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   bool _showForm = false;
   bool _isSubmitting = false;
   String? _feedback;
+  final _searchController = TextEditingController();
+  _CustomerFilter _filter = _CustomerFilter.all;
 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -27,6 +32,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -38,7 +44,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       onRefresh: () async => ref.invalidate(customersProvider),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -54,6 +60,46 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           const SizedBox(height: 16),
           if (_showForm) _buildForm(),
           const SizedBox(height: 16),
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              labelText: 'Search customers',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        setState(() {
+                          _searchController.clear();
+                        });
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            children: [
+              ChoiceChip(
+                label: const Text('All'),
+                selected: _filter == _CustomerFilter.all,
+                onSelected: (_) => setState(() => _filter = _CustomerFilter.all),
+              ),
+              ChoiceChip(
+                label: const Text('Outstanding'),
+                selected: _filter == _CustomerFilter.outstanding,
+                onSelected: (_) => setState(() => _filter = _CustomerFilter.outstanding),
+              ),
+              ChoiceChip(
+                label: const Text('Settled'),
+                selected: _filter == _CustomerFilter.settled,
+                onSelected: (_) => setState(() => _filter = _CustomerFilter.settled),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           customersAsync.when(
             data: (customers) => _buildList(customers),
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -67,7 +113,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   Widget _buildForm() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -107,14 +153,15 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   }
 
   Widget _buildList(List<Customer> customers) {
-    if (customers.isEmpty) {
+    final filtered = _filteredCustomers(customers);
+    if (filtered.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(24),
         child: Center(child: Text('No customers yet.')),
       );
     }
     return Column(
-      children: customers
+      children: filtered
           .map(
             (customer) => Card(
               margin: const EdgeInsets.symmetric(vertical: 6),
@@ -142,11 +189,37 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     ),
                   ],
                 ),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => CustomerDetailPage(customer: customer),
+                  ),
+                ),
               ),
             ),
           )
           .toList(),
     );
+  }
+
+  List<Customer> _filteredCustomers(List<Customer> all) {
+    final query = _searchController.text.trim().toLowerCase();
+    var filtered = all.where((customer) {
+      if (query.isEmpty) return true;
+      return customer.name.toLowerCase().contains(query) ||
+          customer.phone.toLowerCase().contains(query) ||
+          (customer.email?.toLowerCase().contains(query) ?? false);
+    }).where((customer) {
+      switch (_filter) {
+        case _CustomerFilter.outstanding:
+          return customer.balanceAmount > 0;
+        case _CustomerFilter.settled:
+          return customer.balanceAmount <= 0;
+        case _CustomerFilter.all:
+          return true;
+      }
+    }).toList();
+
+    return filtered.take(20).toList();
   }
 
   Future<void> _handleSubmit() async {

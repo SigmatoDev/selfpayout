@@ -9,7 +9,8 @@ export const inventoryItemSchema = z.object({
   taxPercentage: z.number().min(0).max(28).default(0),
   stockQuantity: z.number().int().nonnegative().default(0),
   unit: z.string().default('pcs'),
-  barcode: z.string().optional()
+  barcode: z.string().optional(),
+  category: z.string().optional()
 });
 
 export const inventoryBulkUploadSchema = z.object({

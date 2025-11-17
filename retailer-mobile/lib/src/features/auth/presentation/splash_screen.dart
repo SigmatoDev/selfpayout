@@ -12,7 +12,7 @@ class AppSplashScreen extends StatelessWidget {
           children: [
             Center(
               child: Image.asset(
-                'assets/brand/selfpayout_logo.png',
+                'assets/icon/app_icon.png',
                 width: 160,
                 fit: BoxFit.contain,
               ),

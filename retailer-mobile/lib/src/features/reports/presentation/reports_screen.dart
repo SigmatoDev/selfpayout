@@ -25,7 +25,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     final offlineQueue = ref.watch(offlineQueueControllerProvider);
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
       children: [
         Text('Daily snapshot', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
@@ -50,14 +50,14 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     if (summary == null) {
       return const Card(
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: EdgeInsets.all(12),
           child: Text('No sales captured today.'),
         ),
       );
     }
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -87,7 +87,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Widget _buildOfflineCard(List<OfflineInvoiceEntry> queue) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -126,7 +126,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Widget _buildLedgerCard(List<LedgerEntry> ledger) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

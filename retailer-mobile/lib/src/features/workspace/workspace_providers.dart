@@ -11,6 +11,11 @@ final customersProvider = FutureProvider<List<Customer>>((ref) {
   return ref.watch(retailerApiProvider).fetchCustomers();
 });
 
+final customerHistoryProvider =
+    FutureProvider.family<List<CustomerInvoice>, String>((ref, customerId) {
+  return ref.watch(retailerApiProvider).fetchCustomerHistory(customerId);
+});
+
 final salesSummaryProvider = FutureProvider<SalesSummary?>((ref) {
   return ref.watch(retailerApiProvider).fetchSalesSummary();
 });

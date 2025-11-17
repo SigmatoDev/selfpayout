@@ -73,6 +73,15 @@ class RetailerApi {
     );
   }
 
+  Future<List<CustomerInvoice>> fetchCustomerHistory(String customerId) {
+    return _client.get<List<CustomerInvoice>>(
+      'customers/$customerId/history',
+      (data) => (data as List<dynamic>? ?? [])
+          .map((item) => CustomerInvoice.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
   Future<InvoiceResult> createInvoice(CreateInvoicePayload payload) {
     return _client.post<InvoiceResult>(
       'receipts',

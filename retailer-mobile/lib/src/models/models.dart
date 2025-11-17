@@ -71,6 +71,7 @@ class InventoryItem {
     this.mrp,
     this.unit,
     this.barcode,
+    this.category,
   });
 
   final String id;
@@ -82,6 +83,7 @@ class InventoryItem {
   final double? mrp;
   final String? unit;
   final String? barcode;
+  final String? category;
 
   factory InventoryItem.fromJson(Map<String, dynamic> json) => InventoryItem(
         id: json['id'] as String,
@@ -93,6 +95,7 @@ class InventoryItem {
         mrp: (json['mrp'] as num?)?.toDouble(),
         unit: json['unit'] as String?,
         barcode: json['barcode'] as String?,
+        category: json['category'] as String?,
       );
 }
 
@@ -106,6 +109,7 @@ class InventoryItemRequest {
     this.stockQuantity = 0,
     this.unit = 'pcs',
     this.barcode,
+    this.category,
   });
 
   final String sku;
@@ -116,6 +120,7 @@ class InventoryItemRequest {
   final int stockQuantity;
   final String unit;
   final String? barcode;
+  final String? category;
 
   Map<String, dynamic> toJson(String retailerId) => {
         'retailerId': retailerId,
@@ -127,6 +132,7 @@ class InventoryItemRequest {
         'stockQuantity': stockQuantity,
         'unit': unit,
         'barcode': barcode,
+        'category': category,
       }..removeWhere((key, value) => value == null);
 }
 
@@ -218,6 +224,52 @@ class InvoiceItemPayload {
         quantity: (json['quantity'] as num?)?.toInt() ?? 0,
         price: (json['price'] as num?)?.toDouble() ?? 0,
         taxPercentage: (json['taxPercentage'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+@immutable
+class CustomerInvoice {
+  const CustomerInvoice({
+    required this.id,
+    required this.totalAmount,
+    required this.paymentMode,
+    required this.createdAt,
+    required this.items,
+  });
+
+  final String id;
+  final double totalAmount;
+  final String paymentMode;
+  final DateTime createdAt;
+  final List<CustomerInvoiceItem> items;
+
+  factory CustomerInvoice.fromJson(Map<String, dynamic> json) => CustomerInvoice(
+        id: json['id'] as String,
+        totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0,
+        paymentMode: json['paymentMode'] as String? ?? 'UNKNOWN',
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        items: (json['items'] as List<dynamic>? ?? [])
+            .map((item) => CustomerInvoiceItem.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+@immutable
+class CustomerInvoiceItem {
+  const CustomerInvoiceItem({
+    required this.name,
+    required this.quantity,
+    required this.price,
+  });
+
+  final String name;
+  final double quantity;
+  final double price;
+
+  factory CustomerInvoiceItem.fromJson(Map<String, dynamic> json) => CustomerInvoiceItem(
+        name: json['name'] as String? ?? '',
+        quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
+        price: (json['price'] as num?)?.toDouble() ?? 0,
       );
 }
 

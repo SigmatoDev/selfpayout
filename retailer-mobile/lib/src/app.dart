@@ -39,47 +39,37 @@ class AuthGate extends ConsumerWidget {
     final authState = ref.watch(authControllerProvider);
     final tokenStorage = ref.watch(tokenStorageProvider);
     final hasToken = tokenStorage.hasToken;
-    final showSplash = hasToken && (authState.isLoading || (!authState.hasValue && !authState.hasError));
+    final isBootstrapping = hasToken && (authState.isLoading || (!authState.hasValue && !authState.hasError));
 
-    final pages = <Page<dynamic>>[];
+    void openSignup() {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const SignupScreen()),
+      );
+    }
 
-    if (showSplash) {
-      pages.add(const MaterialPage(child: AppSplashScreen()));
-    } else if (authState.hasError) {
+    if (isBootstrapping) {
+      return const AppSplashScreen();
+    }
+
+    if (authState.hasError) {
       final asyncError = authState.asError;
       final message = asyncError?.error is ApiException
           ? (asyncError!.error as ApiException).message
           : 'Unable to sign in.';
-      pages.add(
-        MaterialPage(
-          child: LoginScreen(
-            onOpenSignup: () => _openSignup(context),
-            initialError: message,
-          ),
-        ),
-      );
-    } else if (authState.value != null) {
-      pages.add(const MaterialPage(child: WorkspaceShell()));
-    } else {
-      pages.add(
-        MaterialPage(
-          child: LoginScreen(
-            onOpenSignup: () => _openSignup(context),
-            isBootstrapping: hasToken,
-          ),
-        ),
+      return LoginScreen(
+        onOpenSignup: openSignup,
+        initialError: message,
       );
     }
 
-    return Navigator(
-      pages: pages,
-      onPopPage: (route, result) => route.didPop(result),
-    );
-  }
+    final user = authState.value;
+    if (user != null) {
+      return const WorkspaceShell();
+    }
 
-  void _openSignup(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SignupScreen()),
+    return LoginScreen(
+      onOpenSignup: openSignup,
+      isBootstrapping: hasToken,
     );
   }
 }

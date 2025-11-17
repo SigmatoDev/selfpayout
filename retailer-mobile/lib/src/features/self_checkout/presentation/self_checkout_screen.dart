@@ -27,7 +27,7 @@ class _SelfCheckoutScreenState extends ConsumerState<SelfCheckoutScreen> {
       children: [
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: SessionStatus.values
                 .map(
@@ -50,7 +50,7 @@ class _SelfCheckoutScreenState extends ConsumerState<SelfCheckoutScreen> {
                 return const Center(child: Text('No sessions in this state.'));
               }
               return ListView.builder(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
                 itemCount: sessions.length,
                 itemBuilder: (context, index) {
                   final session = sessions[index];
@@ -133,7 +133,7 @@ class _SessionCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
