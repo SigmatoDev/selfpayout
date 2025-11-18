@@ -1,9 +1,9 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
-import { createInvoiceSchema } from './receipt.schema';
-import { createInvoice, listInvoices } from './receipt.service';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { createInvoiceSchema } from './receipt.schema.js';
+import { createInvoice, listInvoices } from './receipt.service.js';
 
 export const createInvoiceHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const payload = createInvoiceSchema.parse({ ...req.body, retailerId: req.body.retailerId ?? req.user?.retailerId });

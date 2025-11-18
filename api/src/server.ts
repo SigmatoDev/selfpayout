@@ -1,6 +1,6 @@
-import { createApp } from './app';
-import { connectDatabase } from './config/prisma';
-import { env } from './config/env';
+import { createApp } from './app.js';
+import { connectDatabase } from './config/prisma.js';
+import { env } from './config/env.js';
 
 const bootstrap = async () => {
   await connectDatabase();

@@ -1,9 +1,9 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
-import { subscriptionAssignSchema, subscriptionPlanSchema } from './subscription.schema';
-import { assignPlan, createPlan, listPlans, updatePlan } from './subscription.service';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { subscriptionAssignSchema, subscriptionPlanSchema } from './subscription.schema.js';
+import { assignPlan, createPlan, listPlans, updatePlan } from './subscription.service.js';
 
 export const listPlansHandler = asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
   const plans = await listPlans();

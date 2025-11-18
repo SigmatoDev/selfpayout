@@ -1,8 +1,8 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
-import { retailerCreateSchema, retailerQuerySchema, retailerSignupSchema, retailerUpdateSchema } from './retailer.schema';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { retailerCreateSchema, retailerQuerySchema, retailerSignupSchema, retailerUpdateSchema } from './retailer.schema.js';
 import {
   createRetailer,
   disableRetailer,
@@ -10,7 +10,7 @@ import {
   listRetailers,
   submitRetailerOnboarding,
   updateRetailer
-} from './retailer.service';
+} from './retailer.service.js';
 
 export const listRetailersHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const query = retailerQuerySchema.safeParse(req.query);

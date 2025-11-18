@@ -1,7 +1,7 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
 import {
   sessionItemIdSchema,
   sessionItemSchema,
@@ -10,7 +10,7 @@ import {
   sessionStartSchema,
   sessionSubmitSchema,
   sessionVerifySchema
-} from './session.schema';
+} from './session.schema.js';
 import {
   addItemToSession,
   getSession,
@@ -20,7 +20,7 @@ import {
   startSelfCheckoutSession,
   submitSession,
   verifySession
-} from './session.service';
+} from './session.service.js';
 
 export const startSessionHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const payload = sessionStartSchema.parse(req.body);

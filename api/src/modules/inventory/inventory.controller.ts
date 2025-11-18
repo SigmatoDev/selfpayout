@@ -1,9 +1,9 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
-import { inventoryBulkUploadSchema, inventoryItemSchema } from './inventory.schema';
-import { bulkUpload, listInventory, upsertItem } from './inventory.service';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { inventoryBulkUploadSchema, inventoryItemSchema } from './inventory.schema.js';
+import { bulkUpload, listInventory, upsertItem } from './inventory.service.js';
 
 export const listInventoryHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const retailerId = req.user?.retailerId ?? (req.query.retailerId as string);

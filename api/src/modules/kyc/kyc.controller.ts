@@ -1,9 +1,9 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
-import { kycUpdateSchema } from './kyc.schema';
-import { listPendingKyc, updateKycStatus } from './kyc.service';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { kycUpdateSchema } from './kyc.schema.js';
+import { listPendingKyc, updateKycStatus } from './kyc.service.js';
 
 export const listPendingKycHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const filter = (req.query.status as string | undefined)?.toUpperCase();

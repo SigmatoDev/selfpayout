@@ -1,7 +1,7 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
-import { platformMetricsHandler } from './admin.controller';
+import { authenticate } from '../../middleware/auth.js';
+import { platformMetricsHandler } from './admin.controller.js';
 
 export const adminRouter: ExpressRouter = Router();
 

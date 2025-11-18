@@ -1,7 +1,7 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
-import { outstandingLedgerHandler, salesSummaryHandler } from './sales.controller';
+import { authenticate } from '../../middleware/auth.js';
+import { outstandingLedgerHandler, salesSummaryHandler } from './sales.controller.js';
 
 export const salesRouter: ExpressRouter = Router();
 

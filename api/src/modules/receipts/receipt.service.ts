@@ -1,5 +1,5 @@
-import { prisma } from '../../config/prisma';
-import type { CreateInvoiceInput } from './receipt.schema';
+import { prisma } from '../../config/prisma.js';
+import type { CreateInvoiceInput } from './receipt.schema.js';
 
 type InvoiceTotals = { subtotal: number; tax: number; total: number };
 

@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-import { prisma } from '../../config/prisma';
-import { env } from '../../config/env';
-import type { LoginInput } from './auth.schema';
+import { prisma } from '../../config/prisma.js';
+import { env } from '../../config/env.js';
+import type { LoginInput } from './auth.schema.js';
 
 export const login = async ({ email, password, role }: LoginInput) => {
   const retailerUser = await prisma.user.findUnique({

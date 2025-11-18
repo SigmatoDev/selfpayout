@@ -1,5 +1,6 @@
-import { prisma } from '../../config/prisma';
-import type { SubscriptionAssignInput, SubscriptionPlanInput } from './subscription.schema';
+import { prisma } from '../../config/prisma.js';
+import type { Prisma } from '@prisma/client';
+import type { SubscriptionAssignInput, SubscriptionPlanInput } from './subscription.schema.js';
 
 export const listPlans = () => prisma.subscriptionPlan.findMany({ orderBy: { createdAt: 'desc' } });
 
@@ -10,7 +11,7 @@ export const updatePlan = (id: string, input: SubscriptionPlanInput) =>
   prisma.subscriptionPlan.update({ where: { id }, data: input });
 
 export const assignPlan = async ({ planId, retailerId, startDate, endDate }: SubscriptionAssignInput) => {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const subscription = await tx.subscription.upsert({
       where: { retailerId },
       update: {

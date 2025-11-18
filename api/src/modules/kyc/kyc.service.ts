@@ -1,6 +1,7 @@
-import { prisma } from '../../config/prisma';
-import { resolveObjectUrl } from '../../lib/storage';
-import type { KycUpdateInput } from './kyc.schema';
+import { prisma } from '../../config/prisma.js';
+import { resolveObjectUrl } from '../../lib/storage.js';
+import type { Prisma } from '@prisma/client';
+import type { KycUpdateInput } from './kyc.schema.js';
 
 type KycDocuments = {
   aadhar?: KycDocumentEntry | null;
@@ -73,28 +74,33 @@ const withDocumentUrls = (documents: KycDocuments): KycDocuments => {
   };
 };
 
-export const listPendingKyc = (
+export const listPendingKyc = async (
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL' = 'PENDING',
   retailerId?: string
-) =>
-  prisma.kyc
-    .findMany({
-      where: {
-        ...(status === 'ALL' ? {} : { status }),
-        ...(retailerId ? { retailerId } : {})
-      },
-      include: { retailer: true },
-      orderBy: { createdAt: 'desc' }
-    })
-    .then((records) =>
-      records.map((record) => ({
-        ...record,
-        documents: withDocumentUrls(record.documents as KycDocuments)
-      }))
-    );
+) => {
+  type KycRecordWithRetailer = {
+    retailer: { shopName: string; contactEmail: string; contactPhone: string; address?: string | null };
+    documents: KycDocuments;
+    [key: string]: unknown;
+  };
+
+  const records = await prisma.kyc.findMany({
+    where: {
+      ...(status === 'ALL' ? {} : { status }),
+      ...(retailerId ? { retailerId } : {})
+    },
+    include: { retailer: true },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  return (records as KycRecordWithRetailer[]).map((record) => ({
+    ...record,
+    documents: withDocumentUrls(record.documents as KycDocuments)
+  }));
+};
 
 export const updateKycStatus = async ({ retailerId, status, comments }: KycUpdateInput) => {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const kyc = await tx.kyc.update({
       where: { retailerId },
       data: { status, reviewerComments: comments ?? null },

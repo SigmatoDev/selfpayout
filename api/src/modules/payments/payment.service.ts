@@ -3,11 +3,11 @@ import { randomUUID } from 'crypto';
 
 import Razorpay from 'razorpay';
 
-import type { PaymentStatus } from '@prisma/client';
+type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED' | 'UNKNOWN';
 
-import { env } from '../../config/env';
-import { prisma } from '../../config/prisma';
-import type { PaymentLinkInput, PaymentRefundInput, PaymentWebhookInput } from './payment.schema';
+import { env } from '../../config/env.js';
+import { prisma } from '../../config/prisma.js';
+import type { PaymentLinkInput, PaymentRefundInput, PaymentWebhookInput } from './payment.schema.js';
 
 const razorpay = env.RAZORPAY_KEY_ID
   ? new Razorpay({

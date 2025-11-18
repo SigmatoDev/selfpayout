@@ -1,6 +1,6 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
+import { authenticate } from '../../middleware/auth.js';
 import {
   addItemHandler,
   getSessionHandler,
@@ -10,7 +10,7 @@ import {
   startSessionHandler,
   submitSessionHandler,
   verifySessionHandler
-} from './session.controller';
+} from './session.controller.js';
 
 export const selfCheckoutRouter: ExpressRouter = Router();
 

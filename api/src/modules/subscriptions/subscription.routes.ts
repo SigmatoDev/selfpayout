@@ -1,12 +1,12 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
+import { authenticate } from '../../middleware/auth.js';
 import {
   assignPlanHandler,
   createPlanHandler,
   listPlansHandler,
   updatePlanHandler
-} from './subscription.controller';
+} from './subscription.controller.js';
 
 export const subscriptionRouter: ExpressRouter = Router();
 

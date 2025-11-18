@@ -1,7 +1,7 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
-import { listPendingKycHandler, updateKycStatusHandler } from './kyc.controller';
+import { authenticate } from '../../middleware/auth.js';
+import { listPendingKycHandler, updateKycStatusHandler } from './kyc.controller.js';
 
 export const kycRouter: ExpressRouter = Router();
 

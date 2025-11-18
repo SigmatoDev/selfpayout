@@ -1,6 +1,8 @@
 import { randomBytes } from 'crypto';
 
-import { prisma } from '../../config/prisma';
+import type { Prisma } from '@prisma/client';
+
+import { prisma } from '../../config/prisma.js';
 import type {
   SessionItemInput,
   SessionListInput,
@@ -8,11 +10,17 @@ import type {
   SessionStartInput,
   SessionSubmitInput,
   SessionVerifyInput
-} from './session.schema';
+} from './session.schema.js';
 
 const generateSecurityCode = () => {
   const buffer = randomBytes(3).toString('hex').toUpperCase();
   return buffer.slice(0, 6);
+};
+
+type SessionTotals = {
+  subtotal: number;
+  tax: number;
+  total: number;
 };
 
 export const startSelfCheckoutSession = async ({
@@ -58,7 +66,7 @@ export const startSelfCheckoutSession = async ({
 };
 
 export const addItemToSession = async (sessionId: string, item: SessionItemInput) => {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const session = await (tx as any).selfCheckoutSession.findUnique({
       where: { id: sessionId },
       include: { items: true }
@@ -120,7 +128,7 @@ export const addItemToSession = async (sessionId: string, item: SessionItemInput
 };
 
 export const removeItemFromSession = (sessionId: string, itemId: string) =>
-  prisma.$transaction(async (tx) => {
+  prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const session = await (tx as any).selfCheckoutSession.findUnique({
       where: { id: sessionId },
       include: { items: true, retailer: { select: { shopName: true } }, invoice: { include: { items: true } } }
@@ -173,7 +181,7 @@ export const getSession = (sessionId: string) =>
   });
 
 export const submitSession = async (sessionId: string, _payload: SessionSubmitInput) => {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const session = await (tx as any).selfCheckoutSession.findUnique({
       where: { id: sessionId },
       include: { items: true, retailer: { select: { shopName: true } }, invoice: true }
@@ -200,7 +208,7 @@ export const submitSession = async (sessionId: string, _payload: SessionSubmitIn
 };
 
 export const verifySession = (sessionId: string, payload: SessionVerifyInput) =>
-  prisma.$transaction(async (tx) => {
+  prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const session = await (tx as any).selfCheckoutSession.findUnique({
       where: { id: sessionId },
       include: { items: true, retailer: { select: { shopName: true } }, invoice: { include: { items: true } } }
@@ -257,7 +265,7 @@ export const listSelfCheckoutSessions = async (filters: SessionListInput, retail
 };
 
 const calculateTotals = (items: Array<{ price: number; quantity: number; taxPercentage: number }>) => {
-  return items.reduce(
+  return items.reduce<SessionTotals>(
     (acc, item) => {
       const lineSubtotal = item.price * item.quantity;
       const lineTax = (lineSubtotal * item.taxPercentage) / 100;
@@ -273,7 +281,7 @@ export const markSessionPaid = async (
   sessionId: string,
   payload: SessionPaymentInput & { retailerId?: string }
 ) => {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const session = await (tx as any).selfCheckoutSession.findUnique({
       where: { id: sessionId },
       include: {

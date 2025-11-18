@@ -1,5 +1,5 @@
-import { prisma } from '../../config/prisma';
-import type { InventoryItemInput } from './inventory.schema';
+import { prisma } from '../../config/prisma.js';
+import type { InventoryItemInput } from './inventory.schema.js';
 
 export const listInventory = (retailerId: string, search?: string) =>
   prisma.inventoryItem.findMany({

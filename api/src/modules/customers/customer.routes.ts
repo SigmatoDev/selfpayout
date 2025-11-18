@@ -1,7 +1,7 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
-import { customerHistoryHandler, listCustomersHandler, upsertCustomerHandler } from './customer.controller';
+import { authenticate } from '../../middleware/auth.js';
+import { customerHistoryHandler, listCustomersHandler, upsertCustomerHandler } from './customer.controller.js';
 
 export const customerRouter: ExpressRouter = Router();
 

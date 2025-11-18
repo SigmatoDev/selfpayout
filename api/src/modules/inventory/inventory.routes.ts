@@ -1,7 +1,7 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
-import { bulkUploadHandler, listInventoryHandler, upsertItemHandler } from './inventory.controller';
+import { authenticate } from '../../middleware/auth.js';
+import { bulkUploadHandler, listInventoryHandler, upsertItemHandler } from './inventory.controller.js';
 
 export const inventoryRouter: ExpressRouter = Router();
 

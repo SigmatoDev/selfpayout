@@ -4,8 +4,8 @@ import path from 'path';
 
 import { PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
-import { env } from '../config/env';
-import { prisma } from '../config/prisma';
+import { env } from '../config/env.js';
+import { prisma } from '../config/prisma.js';
 
 type Provider = 'LOCAL' | 'S3';
 

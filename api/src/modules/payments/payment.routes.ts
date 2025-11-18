@@ -1,7 +1,7 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
-import { createPaymentLinkHandler, paymentWebhookHandler, refundPaymentHandler } from './payment.controller';
+import { authenticate } from '../../middleware/auth.js';
+import { createPaymentLinkHandler, paymentWebhookHandler, refundPaymentHandler } from './payment.controller.js';
 
 export const paymentRouter: ExpressRouter = Router();
 

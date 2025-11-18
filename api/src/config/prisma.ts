@@ -1,6 +1,6 @@
 import pkg from '@prisma/client';
 
-import { env, isProduction } from './env';
+import { env, isProduction } from './env.js';
 
 const { PrismaClient } = pkg;
 

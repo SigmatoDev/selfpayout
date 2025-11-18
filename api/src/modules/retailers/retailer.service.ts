@@ -2,10 +2,10 @@ import { randomBytes } from 'crypto';
 
 import bcrypt from 'bcryptjs';
 
-import { env } from '../../config/env';
-import { prisma } from '../../config/prisma';
-import { uploadObject } from '../../lib/storage';
-import type { RetailerCreateInput, RetailerSignupInput, RetailerUpdateInput } from './retailer.schema';
+import { env } from '../../config/env.js';
+import { prisma } from '../../config/prisma.js';
+import { uploadObject } from '../../lib/storage.js';
+import type { RetailerCreateInput, RetailerSignupInput, RetailerUpdateInput } from './retailer.schema.js';
 
 const TEMP_PASSWORD_BYTES = 9;
 const BCRYPT_ROUNDS = 10;

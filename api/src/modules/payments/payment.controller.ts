@@ -1,9 +1,9 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
-import { paymentLinkSchema, paymentRefundSchema, paymentWebhookSchema } from './payment.schema';
-import { createPaymentLink, handlePaymentWebhook, refundPayment } from './payment.service';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { paymentLinkSchema, paymentRefundSchema, paymentWebhookSchema } from './payment.schema.js';
+import { createPaymentLink, handlePaymentWebhook, refundPayment } from './payment.service.js';
 
 export const createPaymentLinkHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const payload = paymentLinkSchema.parse(req.body);

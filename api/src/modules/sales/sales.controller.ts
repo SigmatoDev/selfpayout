@@ -1,9 +1,9 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
-import { salesSummaryQuerySchema } from './sales.schema';
-import { getDailySalesSummary, getOutstandingLedger } from './sales.service';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { salesSummaryQuerySchema } from './sales.schema.js';
+import { getDailySalesSummary, getOutstandingLedger } from './sales.service.js';
 
 export const salesSummaryHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const query = salesSummaryQuerySchema.parse({

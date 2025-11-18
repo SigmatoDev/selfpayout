@@ -1,5 +1,5 @@
-import { prisma } from '../../config/prisma';
-import type { CustomerInput } from './customer.schema';
+import { prisma } from '../../config/prisma.js';
+import type { CustomerInput } from './customer.schema.js';
 
 export const listCustomers = (retailerId: string) =>
   prisma.customer.findMany({

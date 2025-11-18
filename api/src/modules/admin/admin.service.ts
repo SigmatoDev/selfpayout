@@ -1,4 +1,10 @@
-import { prisma } from '../../config/prisma';
+import { prisma } from '../../config/prisma.js';
+
+type ActiveSubscriptionWithPlan = {
+  plan?: {
+    price?: number | null;
+  } | null;
+};
 
 export const getPlatformMetrics = async () => {
   const [totalRetailers, activeRetailers, suspendedRetailers, pendingKyc, activeSubscriptions] =
@@ -13,9 +19,10 @@ export const getPlatformMetrics = async () => {
       })
     ]);
 
-  const monthlyRecurringRevenue = activeSubscriptions.reduce((total, subscription) => {
-    return total + (subscription.plan?.price ?? 0);
-  }, 0);
+  const monthlyRecurringRevenue = activeSubscriptions.reduce(
+    (total: number, subscription: ActiveSubscriptionWithPlan) => total + (subscription.plan?.price ?? 0),
+    0
+  );
 
   return {
     totalRetailers,

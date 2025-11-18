@@ -1,9 +1,9 @@
 import type { Response } from 'express';
 
-import { asyncHandler } from '../../lib/asyncHandler';
-import type { AuthenticatedRequest } from '../../middleware/auth';
-import { customerSchema } from './customer.schema';
-import { fetchCustomerHistory, listCustomers, upsertCustomer } from './customer.service';
+import { asyncHandler } from '../../lib/asyncHandler.js';
+import type { AuthenticatedRequest } from '../../middleware/auth.js';
+import { customerSchema } from './customer.schema.js';
+import { fetchCustomerHistory, listCustomers, upsertCustomer } from './customer.service.js';
 
 export const listCustomersHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const retailerId = req.user?.retailerId ?? (req.query.retailerId as string);

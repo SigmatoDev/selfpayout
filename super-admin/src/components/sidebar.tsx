@@ -2,7 +2,9 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+
+import { clearAuthToken } from '../lib/auth';
 
 const navigation = [
   { href: '/', label: 'Dashboard' },
@@ -13,6 +15,12 @@ const navigation = [
 
 const Sidebar = () => {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    clearAuthToken();
+    router.push('/login');
+  };
 
   return (
     <aside className="w-full rounded-[20px] bg-[color:var(--primary)] p-6 text-white shadow-[0_30px_80px_rgba(208,0,0,0.3)] lg:w-72">
@@ -41,9 +49,18 @@ const Sidebar = () => {
         })}
       </nav>
 
-      <div className="mt-8 rounded-2xl border border-white/20 bg-white/10 p-4 text-xs text-white/80">
-        <p className="font-semibold text-white">Need help?</p>
-        <p className="mt-1">ops@getselfcheckout.com</p>
+      <div className="mt-8 space-y-3 rounded-2xl border border-white/20 bg-white/10 p-4 text-xs text-white/80">
+        <div>
+          <p className="font-semibold text-white">Need help?</p>
+          <p className="mt-1">ops@getselfcheckout.com</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-center text-sm font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-white/20"
+        >
+          Logout
+        </button>
       </div>
     </aside>
   );

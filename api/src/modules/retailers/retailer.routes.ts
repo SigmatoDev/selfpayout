@@ -1,6 +1,6 @@
 import { Router, type Router as ExpressRouter } from 'express';
 
-import { authenticate } from '../../middleware/auth';
+import { authenticate } from '../../middleware/auth.js';
 import {
   createRetailerHandler,
   disableRetailerHandler,
@@ -8,7 +8,7 @@ import {
   listRetailersHandler,
   retailerSignupHandler,
   updateRetailerHandler
-} from './retailer.controller';
+} from './retailer.controller.js';
 
 export const retailerRouter: ExpressRouter = Router();
 
