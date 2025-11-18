@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -9,6 +10,18 @@ import { queryKeys } from '../../../lib/query-keys';
 
 interface ApiCollection<T> {
   data: T;
+}
+
+interface KycDocument {
+  number?: string;
+  file?: {
+    url?: string;
+    originalName?: string;
+    contentType?: string;
+    size?: number;
+    location?: string;
+    storageProvider?: string;
+  } | null;
 }
 
 interface KycRecord {
