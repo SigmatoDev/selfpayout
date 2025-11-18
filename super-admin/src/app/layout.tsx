@@ -6,7 +6,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Selfcheckout Super Admin',
+  title: 'SelfPayout Super Admin',
   description: 'Control center for retailer onboarding and subscriptions'
 };
 
