@@ -12,6 +12,17 @@ interface ApiCollection<T> {
   data: T;
 }
 
+interface KycDocument {
+  number?: string;
+  file?: {
+    url?: string;
+    originalName?: string;
+    contentType?: string;
+    size?: number;
+    storageProvider?: string;
+  } | null;
+}
+
 interface KycRecord {
   id: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
@@ -28,17 +39,6 @@ interface KycRecord {
     contactPhone: string;
     address?: string | null;
   };
-}
-
-interface KycDocument {
-  number?: string;
-  file?: {
-    url?: string;
-    originalName?: string;
-    contentType?: string;
-    size?: number;
-    storageProvider?: string;
-  } | null;
 }
 
 const formatFileSize = (value?: number | null) => {
