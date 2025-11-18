@@ -4,19 +4,22 @@
   "version": "0.1.0",
   "description": "Selfcheckout SaaS platform monorepo",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "api",
+    "packages/*",
+    "super-admin",
+    "retailer-web",
+    "user-web"
   ],
   "scripts": {
-    "dev:api": "pnpm --filter api dev",
-    "dev:super-admin": "pnpm --filter super-admin dev",
-    "dev:retailer-web": "pnpm --filter retailer-web dev",
-    "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
-    "format": "pnpm -r format"
+    "dev:api": "npm --workspace=api run dev",
+    "dev:super-admin": "npm --workspace=super-admin run dev",
+    "dev:retailer-web": "npm --workspace=retailer-web run dev",
+    "dev:user-web": "npm --workspace=user-web run dev",
+    "build": "npm workspaces run build",
+    "lint": "npm workspaces run lint",
+    "format": "npm workspaces run format"
   },
   "engines": {
-    "node": ">=18.17.0",
-    "pnpm": ">=8"
+    "node": ">=18.17.0"
   }
 }

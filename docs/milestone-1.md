@@ -27,7 +27,7 @@
 
 ## UX baseline
 
-- Figma exploration should align with the component structure in `apps/super-admin` and `apps/retailer-web`.
+- Figma exploration should align with the component structure in `super-admin` and `retailer-web`.
 - Navigation patterns: sidebar for admin, bottom nav for retailer mobile.
 - Colour strategy: admin (light, professional), retailer (high-contrast dark mode for readability on phones).
 

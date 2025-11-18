@@ -1,12 +1,13 @@
 # Selfcheckout Monorepo
 
-Milestone 1 scaffolding for the Selfcheckout SaaS platform. The workspace is structured as a pnpm monorepo hosting the core API, the super admin control panel, and the retailer-facing responsive web POS.
+Milestone 1 scaffolding for the Selfcheckout SaaS platform. The workspace is structured as an npm monorepo hosting the core API, the super admin control panel, and the retailer-facing responsive web POS.
 
 ## Apps
 
-- `apps/api` – TypeScript Express API with Prisma (PostgreSQL) and Razorpay integration points.
-- `apps/super-admin` – Next.js 14 app router UI for onboarding, subscriptions, and KYC dashboards.
-- `apps/retailer-web` – Mobile-first Next.js app for billing, inventory, and customer ledgers.
+- `api` – TypeScript Express API with Prisma (PostgreSQL) and Razorpay integration points.
+- `super-admin` – Next.js 14 app router UI for onboarding, subscriptions, and KYC dashboards.
+- `retailer-web` – Mobile-first Next.js app for billing, inventory, and customer ledgers.
+- `user-web` – Customer-facing Next.js self-checkout experience.
 - `retailer-mobile` – Flutter workspace app mirroring the retailer web experience on iOS/Android.
 
 Shared utilities and configuration live under `packages/`.
@@ -14,10 +15,11 @@ Shared utilities and configuration live under `packages/`.
 ## Getting started
 
 ```bash
-pnpm install
-pnpm dev:api   # API at http://localhost:4000
-pnpm dev:super-admin   # Super admin UI at http://localhost:3000
-pnpm dev:retailer-web  # Retailer web app at http://localhost:3001 (configure port via .env.local)
+npm install
+npm run dev:api   # API at http://localhost:4000
+npm run dev:super-admin   # Super admin UI at http://localhost:3000
+npm run dev:retailer-web  # Retailer web app at http://localhost:3001 (configure port via .env.local)
+npm run dev:user-web     # Customer app (set PORT to avoid conflicts)
 ```
 
 ### Retailer mobile (Flutter)
@@ -39,13 +41,13 @@ Copy `.env.example` to `.env` and fill in real credentials. Frontend apps read `
 Generate the Prisma client with:
 
 ```bash
-pnpm --filter api prisma generate
+npm --workspace=api run prisma generate
 ```
 
 Run migrations once schema is finalized:
 
 ```bash
-pnpm --filter api prisma migrate dev --name init
+npm --workspace=api run prisma migrate dev --name init
 ```
 
 ## Milestone 1 scope recap

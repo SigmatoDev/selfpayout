@@ -4,9 +4,9 @@ TypeScript Express API powering the Selfcheckout SaaS platform. Uses Prisma ORM 
 
 ## Available scripts
 
-- `pnpm dev` – start development server with hot reload (requires database + env vars)
-- `pnpm build` – compile to JavaScript
-- `pnpm start` – run compiled build
+- `npm run dev` – start development server with hot reload (requires database + env vars)
+- `npm run build` – compile to JavaScript
+- `npm start` – run compiled build
 
 ## Environment variables
 
