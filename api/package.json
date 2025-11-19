@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.build.json",
     "prestart": "npm run build",
     "start": "node dist/server.js",
+    "prisma:recover": "tsx scripts/recover-migration.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "format": "prettier --write src",
     "prisma": "prisma"

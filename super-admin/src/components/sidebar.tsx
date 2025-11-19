@@ -52,7 +52,7 @@ const Sidebar = () => {
       <div className="mt-8 space-y-3 rounded-2xl border border-white/20 bg-white/10 p-4 text-xs text-white/80">
         <div>
           <p className="font-semibold text-white">Need help?</p>
-          <p className="mt-1">ops@getselfcheckout.com</p>
+          <p className="mt-1">ops@selfpayout.com</p>
         </div>
         <button
           type="button"

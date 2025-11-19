@@ -219,7 +219,7 @@ model Payment {
   status                PaymentStatus @default(PENDING)
   razorpayPaymentLinkId String?
   razorpayPaymentId     String?
-  referenceId           String?       @unique
+  referenceId           String?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 }

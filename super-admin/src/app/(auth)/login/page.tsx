@@ -144,7 +144,7 @@ const LoginPage = () => {
 
             <div className="mt-6 text-center text-xs text-slate-500">
               Need full-time access?{' '}
-              <Link className="font-semibold text-[#d00000]" href="mailto:ops@getselfcheckout.com">
+              <Link className="font-semibold text-[#d00000]" href="mailto:ops@selfpayout.com">
                 Contact platform ops
               </Link>
             </div>

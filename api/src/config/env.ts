@@ -30,7 +30,7 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_REGION: z.string().optional(),
   S3_BUCKET: z.string().optional(),
-  SUPER_ADMIN_EMAIL: z.string().email().default('founder@getselfcheckout.com'),
+  SUPER_ADMIN_EMAIL: z.string().email().default('founder@selfpayout.com'),
   SUPER_ADMIN_PASSWORD: z.string().min(8).optional()
 });
 
