@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820">
+  <defs>
+    <style>
+      .box { fill: #f7f7fb; stroke: #2b2b2b; stroke-width: 2; }
+      .title { font: 700 18px Arial, sans-serif; fill: #1a1a1a; }
+      .label { font: 14px Arial, sans-serif; fill: #1a1a1a; }
+      .small { font: 12px Arial, sans-serif; fill: #1a1a1a; }
+      .line { stroke: #2b2b2b; stroke-width: 2; fill: none; }
+      .section { font: 700 14px Arial, sans-serif; fill: #1a1a1a; }
+    </style>
+  </defs>
+
+  <text x="24" y="28" class="title">FIG. 1 — System Block Diagram</text>
+
+  <!-- Top row -->
+  <rect x="450" y="60" width="300" height="70" class="box" rx="8" />
+  <text x="600" y="95" text-anchor="middle" class="label">106 Super Admin Console</text>
+
+  <rect x="60" y="190" width="300" height="70" class="box" rx="8" />
+  <text x="210" y="225" text-anchor="middle" class="label">102 Customer Device</text>
+
+  <rect x="840" y="190" width="300" height="70" class="box" rx="8" />
+  <text x="990" y="225" text-anchor="middle" class="label">104 Retailer Device</text>
+
+  <rect x="450" y="200" width="300" height="60" class="box" rx="8" />
+  <text x="600" y="235" text-anchor="middle" class="label">108 Network</text>
+
+  <!-- API server -->
+  <rect x="360" y="320" width="480" height="110" class="box" rx="8" />
+  <text x="600" y="350" text-anchor="middle" class="label">110 API Server</text>
+  <text x="600" y="375" text-anchor="middle" class="small">112 Auth • 114 Self-Checkout • 116 Inventory • 118 Ledger</text>
+  <text x="600" y="395" text-anchor="middle" class="small">120 Receipts • 122 Subscription/KYC • 124 Payments • 126 Reporting</text>
+  <text x="600" y="415" text-anchor="middle" class="small">128 Storage</text>
+
+  <!-- Data store / object storage / payment gateway -->
+  <rect x="210" y="480" width="260" height="70" class="box" rx="8" />
+  <text x="340" y="515" text-anchor="middle" class="label">130 Data Store</text>
+
+  <rect x="520" y="480" width="260" height="70" class="box" rx="8" />
+  <text x="650" y="515" text-anchor="middle" class="label">132 Object Storage</text>
+
+  <rect x="830" y="480" width="260" height="70" class="box" rx="8" />
+  <text x="960" y="515" text-anchor="middle" class="label">134 Payment Gateway</text>
+
+  <!-- Additional subsystems -->
+  <text x="60" y="620" class="section">Additional local subsystems</text>
+  <rect x="60" y="640" width="320" height="50" class="box" rx="8" />
+  <text x="220" y="670" text-anchor="middle" class="label">136 Offline Queue Store</text>
+
+  <rect x="420" y="640" width="320" height="50" class="box" rx="8" />
+  <text x="580" y="670" text-anchor="middle" class="label">138 Scanner / Camera</text>
+
+  <rect x="780" y="640" width="320" height="50" class="box" rx="8" />
+  <text x="940" y="670" text-anchor="middle" class="label">140 Menu Service</text>
+
+  <!-- Lines -->
+  <line x1="600" y1="130" x2="600" y2="200" class="line" />
+  <line x1="360" y1="225" x2="450" y2="225" class="line" />
+  <line x1="750" y1="225" x2="840" y2="225" class="line" />
+  <line x1="600" y1="260" x2="600" y2="320" class="line" />
+  <line x1="520" y1="430" x2="340" y2="480" class="line" />
+  <line x1="600" y1="430" x2="650" y2="480" class="line" />
+  <line x1="680" y1="430" x2="960" y2="480" class="line" />
+
+  <!-- Network fan-in -->
+  <line x1="210" y1="260" x2="450" y2="230" class="line" />
+  <line x1="990" y1="260" x2="750" y2="230" class="line" />
+</svg>

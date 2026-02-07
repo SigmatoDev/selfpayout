@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -26,6 +27,9 @@ interface RetailerRecord {
   contactEmail: string;
   contactPhone: string;
   languagePreference?: 'en' | 'hi' | 'ka';
+  storeType?: 'KIRANA' | 'RESTAURANT' | 'TRAIN';
+  fssaiNumber?: string | null;
+  serviceChargePct?: number | null;
   subscription?: {
     plan?: RetailerPlan | null;
   } | null;
@@ -60,6 +64,9 @@ interface CreateRetailerPayload {
   contactPhone: string;
   shopName: string;
   address: string;
+  storeType: 'KIRANA' | 'RESTAURANT' | 'TRAIN';
+  fssaiNumber?: string;
+  serviceChargePct?: number;
   gstEnabled: boolean;
   gstNumber?: string;
   subscriptionPlanId: string;
@@ -96,6 +103,11 @@ const RetailersPage = () => {
   const [customPassword, setCustomPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordRequestSource, setPasswordRequestSource] = useState<'auto' | 'custom' | null>(null);
+  const storeTypes: Array<{ id: CreateRetailerPayload['storeType']; label: string }> = [
+    { id: 'RESTAURANT', label: 'Restaurant' },
+    { id: 'KIRANA', label: 'Kirana / general store' },
+    { id: 'TRAIN', label: 'Train / kiosk' }
+  ];
 
   useEffect(() => {
     setHasToken(Boolean(getAuthToken()));
@@ -278,7 +290,14 @@ const RetailersPage = () => {
                             <span className="text-xs text-slate-500">{retailer.contactPhone}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-slate-600">{planLabel}</td>
+                        <td className="px-4 py-3 text-slate-600">
+                          <div className="flex flex-col gap-1">
+                            <span>{planLabel}</span>
+                            <span className="text-[11px] uppercase tracking-wide text-slate-500">
+                              {retailer.storeType ?? 'N/A'} • {retailer.serviceChargePct ?? 0}% svc
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-slate-600">{storageLabel}</td>
                         <td className="px-4 py-3">
                           <span
@@ -302,6 +321,22 @@ const RetailersPage = () => {
                             >
                               Assign plan
                             </button>
+                            <a
+                              href={`https://chart.googleapis.com/chart?cht=qr&chs=240x240&chl=${encodeURIComponent(
+                                retailer.id
+                              )}&chld=L|1`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-medium text-slate-600 underline-offset-2 hover:underline"
+                            >
+                              Open QR
+                            </a>
+                            <Link
+                              href={`/retailers/${retailer.id}`}
+                              className="text-xs font-medium text-slate-600 underline-offset-2 hover:underline"
+                            >
+                              View detail
+                            </Link>
                             <button
                               onClick={() => handleResetPassword(retailer.id)}
                               disabled={resetPasswordMutation.isPending}
@@ -441,6 +476,9 @@ const RetailerForm = ({
     contactPhone: '',
     shopName: '',
     address: '',
+    storeType: 'RESTAURANT',
+    fssaiNumber: '',
+    serviceChargePct: 0,
     gstEnabled: false,
     gstNumber: undefined,
     subscriptionPlanId: plans[0]?.id ?? '',
@@ -455,6 +493,7 @@ const RetailerForm = ({
     event.preventDefault();
     onSubmit({
       ...formState,
+      serviceChargePct: Number(formState.serviceChargePct ?? 0),
       gstNumber: formState.gstEnabled ? formState.gstNumber?.trim() || undefined : undefined
     });
   };
@@ -499,6 +538,18 @@ const RetailerForm = ({
             className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
           />
         </label>
+        <label className="text-sm font-medium text-slate-600">
+          Store type
+          <select
+            value={formState.storeType}
+            onChange={(event) => updateField('storeType', event.target.value as CreateRetailerPayload['storeType'])}
+            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
+          >
+            <option value="RESTAURANT">Restaurant</option>
+            <option value="KIRANA">Kirana / general store</option>
+            <option value="TRAIN">Train / kiosk</option>
+          </select>
+        </label>
       </div>
 
       <label className="text-sm font-medium text-slate-600">
@@ -513,6 +564,27 @@ const RetailerForm = ({
       </label>
 
       <div className="grid gap-4 md:grid-cols-2">
+        <label className="text-sm font-medium text-slate-600">
+          FSSAI number (restaurants)
+          <input
+            value={formState.fssaiNumber ?? ''}
+            onChange={(event) => updateField('fssaiNumber', event.target.value)}
+            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
+            placeholder="Optional"
+          />
+        </label>
+        <label className="text-sm font-medium text-slate-600">
+          Default service charge %
+          <input
+            type="number"
+            min={0}
+            max={25}
+            value={formState.serviceChargePct ?? 0}
+            onChange={(event) => updateField('serviceChargePct', Number(event.target.value))}
+            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
+          />
+        </label>
+
         <label className="text-sm font-medium text-slate-600">
           Subscription plan
           <select

@@ -1,17 +1,21 @@
 import '../../models/models.dart';
 import 'api_client.dart';
+import '../../features/ticketing/presentation/ticket_models.dart';
+import '../../features/ticketing/presentation/ticket_order_detail_screen.dart';
+import '../../features/orders/presentation/marketplace_order_detail_screen.dart';
+import '../../features/orders/presentation/counter_order_models.dart';
 
 class RetailerApi {
   RetailerApi(this._client);
 
   final ApiClient _client;
 
-  Future<LoginResult> login(String email, String password) {
+  Future<LoginResult> loginWithOtp(String phone, String otp) {
     return _client.post<LoginResult>(
-      'auth/login',
+      'auth/login-otp',
       body: {
-        'email': email,
-        'password': password,
+        'phone': phone,
+        'otp': otp,
         'role': 'RETAILER_ADMIN',
       },
       parser: (data) => LoginResult.fromJson(data as Map<String, dynamic>),
@@ -135,7 +139,112 @@ class RetailerApi {
     );
   }
 
+  Future<MenuResponse> fetchRestaurantMenu(String retailerId) {
+    return _client.get<MenuResponse>(
+      'restaurants/$retailerId/menu',
+      (data) => MenuResponse.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<MenuResponse> saveRestaurantMenu(String retailerId, Map<String, dynamic> payload) {
+    return _client.post<MenuResponse>(
+      'restaurants/$retailerId/menu',
+      body: payload,
+      parser: (data) => MenuResponse.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<List<TableInfo>> fetchTables(String retailerId) {
+    return _client.get<List<TableInfo>>(
+      'restaurants/$retailerId/tables',
+      (data) => (data as List<dynamic>? ?? [])
+          .map((item) => TableInfo.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<TableInfo> upsertTable(String retailerId, {required String label, required int capacity}) {
+    return _client.post<TableInfo>(
+      'restaurants/$retailerId/tables',
+      body: {'label': label, 'capacity': capacity},
+      parser: (data) => TableInfo.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> deleteTable(String retailerId, String tableId) {
+    return _client.deleteVoid('restaurants/$retailerId/tables/$tableId');
+  }
+
+  Future<List<PaymentInvoice>> fetchInvoices(String retailerId) {
+    return _client.get<List<PaymentInvoice>>(
+      'receipts',
+      (data) => (data as List<dynamic>? ?? [])
+          .map((item) => PaymentInvoice.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      queryParameters: {'retailerId': retailerId},
+    );
+  }
+
   Future<void> submitSignup(SignupPayload payload) {
     return _client.postVoid('retailers/signup', body: payload.toJson());
+  }
+
+  Future<List<TicketDetail>> fetchTicketEvents(String retailerId) {
+    return _client.get<List<TicketDetail>>(
+      'ticketing/retailers/$retailerId/events',
+      (data) => (data as List<dynamic>? ?? [])
+          .map((item) => TicketDetail.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<TicketDetail> fetchTicketEvent(String eventId) {
+    return _client.get<TicketDetail>(
+      'ticketing/events/$eventId',
+      (data) => TicketDetail.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<List<TicketOrder>> fetchTicketOrders(String retailerId) {
+    return _client.get<List<TicketOrder>>(
+      'ticketing/retailers/$retailerId/orders',
+      (data) => (data as List<dynamic>? ?? [])
+          .map((item) => TicketOrder.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<List<MarketplaceOrder>> fetchMarketplaceOrders(String retailerId) {
+    return _client.get<List<MarketplaceOrder>>(
+      'marketplace/retailers/$retailerId/orders',
+      (data) => (data as List<dynamic>? ?? [])
+          .map((item) => MarketplaceOrder.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<MarketplaceOrder> updateMarketplaceOrderStatus(String retailerId, String orderId, String status) {
+    return _client.patch<MarketplaceOrder>(
+      'marketplace/retailers/$retailerId/orders/$orderId/status',
+      body: {'status': status},
+      parser: (data) => MarketplaceOrder.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  Future<List<CounterOrder>> fetchCounterOrders() {
+    return _client.get<List<CounterOrder>>(
+      'counter/orders',
+      (data) => (data as List<dynamic>? ?? [])
+          .map((item) => CounterOrder.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<CounterOrder> createCounterOrder(Map<String, dynamic> payload) {
+    return _client.post<CounterOrder>(
+      'counter/orders',
+      body: payload,
+      parser: (data) => CounterOrder.fromJson(data as Map<String, dynamic>),
+    );
   }
 }

@@ -5,6 +5,7 @@ import {
   createRetailerHandler,
   disableRetailerHandler,
   enableRetailerHandler,
+  listPublicRetailersHandler,
   listRetailersHandler,
   retailerSignupHandler,
   updateRetailerHandler
@@ -13,6 +14,8 @@ import {
 export const retailerRouter: ExpressRouter = Router();
 
 retailerRouter.post('/signup', retailerSignupHandler);
+// Public list for customers selecting stores
+retailerRouter.get('/public', listPublicRetailersHandler);
 retailerRouter.use(authenticate(['SUPER_ADMIN']));
 retailerRouter.get('/', listRetailersHandler);
 retailerRouter.post('/', createRetailerHandler);

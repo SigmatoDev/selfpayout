@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const languageEnum = z.enum(['en', 'hi', 'ka']);
+const storeTypeEnum = z.enum(['KIRANA', 'RESTAURANT', 'TRAIN']);
 
 export const retailerCreateSchema = z.object({
   name: z.string().min(2),
@@ -8,6 +9,9 @@ export const retailerCreateSchema = z.object({
   contactPhone: z.string().min(8),
   shopName: z.string().min(2),
   address: z.string().min(5),
+  storeType: storeTypeEnum.default('RESTAURANT'),
+  fssaiNumber: z.string().optional(),
+  serviceChargePct: z.number().min(0).max(25).default(0),
   gstEnabled: z.boolean().default(false),
   gstNumber: z.string().optional(),
   subscriptionPlanId: z.string().uuid(),
@@ -39,9 +43,13 @@ export const retailerSignupSchema = z.object({
   gstEnabled: z.boolean().default(false),
   gstNumber: z.string().optional(),
   languagePreference: languageEnum.default('en'),
+  storeType: storeTypeEnum.default('RESTAURANT'),
+  fssaiNumber: z.string().optional(),
+  serviceChargePct: z.number().min(0).max(25).default(0),
   subscriptionPlanId: z.string().uuid().optional(),
   aadharNumber: z.string().min(6),
   panNumber: z.string().min(5),
+  password: z.string().min(8),
   documents: z.object({
     aadhar: documentFileSchema,
     pan: documentFileSchema

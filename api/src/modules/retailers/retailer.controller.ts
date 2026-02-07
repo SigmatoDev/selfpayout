@@ -7,6 +7,7 @@ import {
   createRetailer,
   disableRetailer,
   enableRetailer,
+  listPublicRetailers,
   listRetailers,
   submitRetailerOnboarding,
   updateRetailer
@@ -15,6 +16,11 @@ import {
 export const listRetailersHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const query = retailerQuerySchema.safeParse(req.query);
   const retailers = await listRetailers(query.success ? query.data : {});
+  res.json({ data: retailers });
+});
+
+export const listPublicRetailersHandler = asyncHandler(async (_req, res: Response) => {
+  const retailers = await listPublicRetailers();
   res.json({ data: retailers });
 });
 

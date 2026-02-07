@@ -11,10 +11,13 @@ class AppSplashScreen extends StatelessWidget {
         child: Stack(
           children: [
             Center(
-              child: Image.asset(
-                'assets/icon/app_icon.png',
-                width: 160,
-                fit: BoxFit.contain,
+              child: SizedBox(
+                width: 120,
+                height: 120,
+                child: Image.asset(
+                  'assets/icon/app_icon.png',
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
             const Positioned(

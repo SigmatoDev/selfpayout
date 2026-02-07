@@ -135,6 +135,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('New inventory item', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text(
+              'These products are visible to customers in the marketplace.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             if (categorySuggestions.isNotEmpty) ...[
               const SizedBox(height: 8),
               Wrap(

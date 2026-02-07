@@ -39,6 +39,34 @@ enum PaymentMode {
   CARD
 }
 
+enum TicketEventStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum TicketOrderStatus {
+  RESERVED
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum MarketplaceOrderStatus {
+  SUBMITTED
+  ACCEPTED
+  PACKING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum CounterOrderStatus {
+  CREATED
+  PAID
+  CANCELLED
+}
+
 enum StoreType {
   KIRANA
   RESTAURANT
@@ -67,11 +95,15 @@ enum SelfCheckoutStatus {
 
 model Retailer {
   id                 String           @id @default(uuid())
+  retailerCode       String?          @unique
   name               String
   shopName           String
   contactEmail       String           @unique
   contactPhone       String
   address            String
+  storeType          StoreType        @default(RESTAURANT)
+  fssaiNumber        String?
+  serviceChargePct   Float            @default(0)
   gstEnabled         Boolean          @default(false)
   gstNumber          String?
   languagePreference String           @default("en")
@@ -89,6 +121,21 @@ model Retailer {
   payments           Payment[]
   settings           RetailerSettings?
   selfCheckoutSessions SelfCheckoutSession[]
+  restaurantTables   RestaurantTable[]
+  menuCategories     MenuCategory[]
+  menuItems          MenuItem[]
+  kitchenTickets     KitchenTicket[]
+  ticketEvents       TicketEvent[]
+  ticketOrders       TicketOrder[]
+  marketplaceOrders  MarketplaceOrder[]
+  counterOrders      CounterOrder[]
+}
+
+model Sequence {
+  key       String   @id
+  value     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model User {
@@ -172,6 +219,7 @@ model Customer {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   invoices      Invoice[]
+  selfCheckoutSessions SelfCheckoutSession[]
 
   @@unique([retailerId, phone], name: "retailerId_phone")
 }
@@ -257,11 +305,17 @@ model SelfCheckoutSession {
   id               String              @id @default(uuid())
   retailer         Retailer            @relation(fields: [retailerId], references: [id])
   retailerId       String
+  customer         Customer?           @relation(fields: [customerId], references: [id])
+  customerId       String?
   customerPhone    String?
   kioskDeviceId    String?
+  tableNumber      String?
+  guestCount       Int?
   status           SelfCheckoutStatus  @default(IN_PROGRESS)
   storeType        StoreType           @default(KIRANA)
   totalAmount      Float               @default(0)
+  serviceChargePct Float               @default(0)
+  preferredPaymentMode PaymentMode?
   securityCode     String              @unique
   securityVerifiedAt DateTime?
   notes            String?
@@ -272,8 +326,11 @@ model SelfCheckoutSession {
   items            SelfCheckoutItem[]
   invoice          Invoice?            @relation("SessionInvoice")
   securityEvents   SecurityGateEvent[]
+  kitchenTickets   KitchenTicket[]
 
   @@index([retailerId])
+  @@index([customerId])
+  @@index([retailerId, tableNumber])
 }
 
 model SelfCheckoutItem {
@@ -305,4 +362,233 @@ model SecurityGateEvent {
   attachmentUrl  String?
 
   @@index([sessionId])
+}
+
+model RestaurantTable {
+  id         String   @id @default(uuid())
+  retailer   Retailer @relation(fields: [retailerId], references: [id])
+  retailerId String
+  label      String
+  capacity   Int      @default(2)
+  status     String   @default("AVAILABLE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([retailerId, label], name: "retailerId_tableLabel")
+}
+
+model MenuCategory {
+  id          String        @id @default(uuid())
+  retailer    Retailer      @relation(fields: [retailerId], references: [id])
+  retailerId  String
+  name        String
+  description String?
+  sortOrder   Int           @default(0)
+  items       MenuItem[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([retailerId])
+}
+
+model MenuItem {
+  id              String         @id @default(uuid())
+  category        MenuCategory   @relation(fields: [categoryId], references: [id])
+  categoryId      String
+  retailer        Retailer       @relation(fields: [retailerId], references: [id])
+  retailerId      String
+  name            String
+  sku             String
+  price           Float
+  taxPercentage   Float          @default(0)
+  tags            String[]
+  isVeg           Boolean?
+  isAvailable     Boolean        @default(true)
+  sortOrder       Int            @default(0)
+  addOnGroups     MenuAddOnGroup[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([retailerId, sku], name: "retailer_menu_sku")
+  @@index([categoryId])
+  @@index([retailerId])
+}
+
+model MenuAddOnGroup {
+  id        String       @id @default(uuid())
+  item      MenuItem     @relation(fields: [itemId], references: [id])
+  itemId    String
+  name      String
+  min       Int          @default(0)
+  max       Int          @default(1)
+  sortOrder Int          @default(0)
+  options   MenuAddOnOption[]
+}
+
+model MenuAddOnOption {
+  id           String        @id @default(uuid())
+  addOnGroup   MenuAddOnGroup @relation(fields: [addOnGroupId], references: [id])
+  addOnGroupId String
+  label        String
+  price        Float         @default(0)
+  isDefault    Boolean       @default(false)
+  sortOrder    Int           @default(0)
+}
+
+model KitchenTicket {
+  id          String   @id @default(uuid())
+  retailer    Retailer @relation(fields: [retailerId], references: [id])
+  retailerId  String
+  session     SelfCheckoutSession @relation(fields: [sessionId], references: [id])
+  sessionId   String
+  ticketNumber String
+  notes       String?
+  status      String   @default("QUEUED")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([retailerId])
+  @@unique([sessionId], name: "session_kot_unique")
+}
+
+model Consumer {
+  id                   String   @id @default(uuid())
+  phone                String   @unique
+  name                 String?
+  email                String?
+  avatarUrl            String?
+  address              String?
+  notificationsEnabled Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ticketOrders         TicketOrder[]
+  marketplaceOrders    MarketplaceOrder[]
+}
+
+model TicketEvent {
+  id           String            @id @default(uuid())
+  retailer     Retailer          @relation(fields: [retailerId], references: [id])
+  retailerId   String
+  title        String
+  venue        String
+  dateLabel    String
+  price        Float
+  owner        String
+  imageUrl     String
+  gallery      String[]
+  location     String
+  attractions  String[]
+  ticketsLeft  Int               @default(0)
+  status       TicketEventStatus @default(ACTIVE)
+  sellerName   String
+  sellerRating Float             @default(4.5)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  tiers        TicketTier[]
+  orders       TicketOrder[]
+}
+
+model TicketTier {
+  id         String      @id @default(uuid())
+  event      TicketEvent @relation(fields: [eventId], references: [id])
+  eventId    String
+  label      String
+  price      Float
+  mrp        Float
+  available  Int
+  sortOrder  Int         @default(0)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  orderItems TicketOrderItem[]
+}
+
+model TicketOrder {
+  id           String           @id @default(uuid())
+  retailer     Retailer         @relation(fields: [retailerId], references: [id])
+  retailerId   String
+  event        TicketEvent      @relation(fields: [eventId], references: [id])
+  eventId      String
+  consumer     Consumer?        @relation(fields: [consumerId], references: [id])
+  consumerId   String?
+  buyerName    String
+  buyerPhone   String
+  status       TicketOrderStatus @default(RESERVED)
+  totalAmount  Float
+  ticketsCount Int
+  bookedAt     DateTime         @default(now())
+  paymentMode  PaymentMode?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  items        TicketOrderItem[]
+}
+
+model TicketOrderItem {
+  id        String      @id @default(uuid())
+  order     TicketOrder @relation(fields: [orderId], references: [id])
+  orderId   String
+  tier      TicketTier  @relation(fields: [tierId], references: [id])
+  tierId    String
+  label     String
+  price     Float
+  quantity  Int
+  createdAt DateTime    @default(now())
+}
+
+model MarketplaceOrder {
+  id              String                @id @default(uuid())
+  retailer        Retailer              @relation(fields: [retailerId], references: [id])
+  retailerId      String
+  consumer        Consumer?             @relation(fields: [consumerId], references: [id])
+  consumerId      String?
+  buyerName       String
+  buyerPhone      String
+  status          MarketplaceOrderStatus @default(SUBMITTED)
+  totalAmount     Float
+  deliveryAddress String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  items           MarketplaceOrderItem[]
+}
+
+model MarketplaceOrderItem {
+  id              String          @id @default(uuid())
+  order           MarketplaceOrder @relation(fields: [orderId], references: [id])
+  orderId         String
+  inventoryItem   InventoryItem?  @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId String?
+  name            String
+  sku             String
+  price           Float
+  quantity        Int
+  createdAt       DateTime        @default(now())
+}
+
+model CounterOrder {
+  id           String            @id @default(uuid())
+  retailer     Retailer          @relation(fields: [retailerId], references: [id])
+  retailerId   String
+  customerName String?
+  customerPhone String?
+  status       CounterOrderStatus @default(CREATED)
+  totalAmount  Float
+  paymentMode  PaymentMode?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  items        CounterOrderItem[]
+}
+
+model CounterOrderItem {
+  id        String       @id @default(uuid())
+  order     CounterOrder @relation(fields: [orderId], references: [id])
+  orderId   String
+  name      String
+  sku       String?
+  price     Float
+  quantity  Int
+  createdAt DateTime     @default(now())
 }

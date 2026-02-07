@@ -11,6 +11,7 @@ import {
   submitSessionHandler,
   verifySessionHandler
 } from './session.controller.js';
+import { updateSessionTableHandler } from './session.controller.js';
 
 export const selfCheckoutRouter: ExpressRouter = Router();
 
@@ -19,6 +20,7 @@ selfCheckoutRouter.get('/sessions/:id', getSessionHandler);
 selfCheckoutRouter.post('/sessions/:id/items', addItemHandler);
 selfCheckoutRouter.delete('/sessions/:id/items/:itemId', removeItemHandler);
 selfCheckoutRouter.post('/sessions/:id/submit', submitSessionHandler);
+selfCheckoutRouter.patch('/sessions/:id/table', updateSessionTableHandler);
 
 selfCheckoutRouter.use(authenticate(['RETAILER_ADMIN', 'RETAILER_STAFF', 'SUPER_ADMIN']));
 selfCheckoutRouter.get('/sessions', listSessionsHandler);

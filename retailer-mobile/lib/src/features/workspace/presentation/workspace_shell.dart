@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/di/providers.dart';
 import '../../../core/language/language_controller.dart';
@@ -8,8 +9,9 @@ import '../../auth/controller/auth_controller.dart';
 import '../../billing/presentation/billing_screen.dart';
 import '../../customers/presentation/customers_screen.dart';
 import '../../inventory/presentation/inventory_screen.dart';
+import '../../orders/presentation/orders_screen.dart';
+import '../../profile/presentation/retailer_profile_screen.dart';
 import '../../reports/presentation/reports_screen.dart';
-import '../../self_checkout/presentation/self_checkout_screen.dart';
 
 class WorkspaceShell extends ConsumerStatefulWidget {
   const WorkspaceShell({super.key});
@@ -21,6 +23,9 @@ class WorkspaceShell extends ConsumerStatefulWidget {
 class _WorkspaceShellState extends ConsumerState<WorkspaceShell> {
   int _currentIndex = 0;
   bool _compactHeader = false;
+  bool _checkedOnboarding = false;
+  bool _showTour = false;
+  int _tourStep = 0;
 
   late final List<_WorkspaceTab> _tabs = [
     _WorkspaceTab(
@@ -39,23 +44,43 @@ class _WorkspaceShellState extends ConsumerState<WorkspaceShell> {
       child: const CustomersScreen(),
     ),
     _WorkspaceTab(
+      icon: Icons.receipt_long,
+      translationKey: TranslationKey.orders,
+      child: const OrdersScreen(),
+    ),
+    _WorkspaceTab(
       icon: Icons.stacked_bar_chart_rounded,
       translationKey: TranslationKey.reports,
       child: const ReportsScreen(),
     ),
-    _WorkspaceTab(
-      icon: Icons.qr_code_scanner_rounded,
-      translationKey: TranslationKey.selfCheckout,
-      child: const SelfCheckoutScreen(),
-    ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowOnboarding());
+  }
+
+  Future<void> _maybeShowOnboarding() async {
+    if (_checkedOnboarding) return;
+    _checkedOnboarding = true;
+    final prefs = await SharedPreferences.getInstance();
+    const key = 'selfcheckout_retailer_onboarding_seen_v1';
+    final hasSeen = prefs.getBool(key) ?? false;
+    if (hasSeen || !mounted) return;
+    setState(() {
+      _showTour = true;
+      _tourStep = 0;
+      _currentIndex = 0;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(languageStringsProvider);
     final user = ref.watch(authControllerProvider).valueOrNull;
 
-    return Scaffold(
+    final scaffold = Scaffold(
       body: SafeArea(
         child: Column(
           children: [
@@ -105,6 +130,42 @@ class _WorkspaceShellState extends ConsumerState<WorkspaceShell> {
             .toList(),
       ),
     );
+
+    if (!_showTour) return scaffold;
+
+    return Stack(
+      children: [
+        scaffold,
+        _GuidedTourOverlay(
+          step: _tourStep,
+          onNext: _advanceTour,
+          onSkip: _dismissTour,
+        ),
+      ],
+    );
+  }
+
+  void _dismissTour() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('selfcheckout_retailer_onboarding_seen_v1', true);
+    if (!mounted) return;
+    setState(() => _showTour = false);
+  }
+
+  void _advanceTour() {
+    final nextStep = _tourStep + 1;
+    if (nextStep >= _GuidedTourOverlay.totalSteps) {
+      _dismissTour();
+      return;
+    }
+    setState(() {
+      _tourStep = nextStep;
+      if (_tourStep == 0 || _tourStep == 1) {
+        _currentIndex = 0;
+      } else if (_tourStep == 2) {
+        _currentIndex = 5;
+      }
+    });
   }
 }
 
@@ -120,8 +181,6 @@ class _WorkspaceTab {
   final Widget child;
 }
 
-enum _HeaderMenuAction { toggleTheme, toggleLanguage, logout }
-
 class _Header extends ConsumerWidget {
   const _Header({this.user, required this.compact});
 
@@ -131,23 +190,7 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = ref.watch(languageStringsProvider);
-    final themeMode = ref.watch(themeControllerProvider);
-    final language = ref.watch(languageControllerProvider);
-
     const brandColor = Color(0xFFD00000);
-    void handleMenuSelection(_HeaderMenuAction action) {
-      switch (action) {
-        case _HeaderMenuAction.toggleTheme:
-          ref.read(themeControllerProvider.notifier).toggle();
-          break;
-        case _HeaderMenuAction.toggleLanguage:
-          ref.read(languageControllerProvider.notifier).toggle();
-          break;
-        case _HeaderMenuAction.logout:
-          ref.read(authControllerProvider.notifier).logout();
-          break;
-      }
-    }
 
     return Container(
       decoration: BoxDecoration(
@@ -212,46 +255,19 @@ class _Header extends ConsumerWidget {
                               ],
                             ),
                     ),
-                  ],
+                ],
+              ),
+                IconButton(
+                  icon: const Icon(Icons.account_circle, size: 30),
+                  tooltip: 'Retailer profile',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => RetailerProfileScreen(user: user),
+                      ),
+                    );
+                  },
                 ),
-                PopupMenuButton<_HeaderMenuAction>(
-                  icon: const Icon(Icons.menu),
-                  tooltip: 'Menu',
-                  onSelected: handleMenuSelection,
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: _HeaderMenuAction.toggleTheme,
-                      child: Row(
-                        children: [
-                          Icon(themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode, size: 18),
-                          const SizedBox(width: 8),
-                          Text(themeMode == ThemeMode.dark ? 'Light mode' : 'Dark mode'),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: _HeaderMenuAction.toggleLanguage,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.translate, size: 18),
-                          const SizedBox(width: 8),
-                          Text('Language (${language.toggleLabel})'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                    const PopupMenuItem(
-                      value: _HeaderMenuAction.logout,
-                      child: Row(
-                        children: [
-                          Icon(Icons.logout, size: 18),
-                          SizedBox(width: 8),
-                          Text('Logout'),
-                        ],
-                      ),
-                    ),
-                  ],
-                )
               ],
             ),
             const SizedBox(height: 12),
@@ -270,6 +286,131 @@ class _Header extends ConsumerWidget {
                 ],
               ),
               secondChild: const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GuidedTourOverlay extends StatelessWidget {
+  const _GuidedTourOverlay({
+    required this.step,
+    required this.onNext,
+    required this.onSkip,
+  });
+
+  final int step;
+  final VoidCallback onNext;
+  final VoidCallback onSkip;
+
+  static const totalSteps = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = [
+      const _TourStep(
+        title: 'Billing hub',
+        message: 'Self-checkout sessions now appear on top of Billing.',
+        alignment: Alignment(0, -0.4),
+      ),
+      const _TourStep(
+        title: 'Scan items',
+        message: 'Tap the QR icon near the item search to scan barcodes quickly.',
+        alignment: Alignment(0, 0.1),
+      ),
+      const _TourStep(
+        title: 'Table QR codes',
+        message: 'Go to Tables to view, download, or print QR codes.',
+        alignment: Alignment(0, 0.6),
+      ),
+    ];
+
+    final current = steps[step.clamp(0, steps.length - 1)];
+
+    return Positioned.fill(
+      child: Material(
+        color: Colors.black54,
+        child: Stack(
+          children: [
+            Align(
+              alignment: current.alignment,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _TourCard(
+                  title: current.title,
+                  message: current.message,
+                  step: step + 1,
+                  total: steps.length,
+                  onNext: onNext,
+                  onSkip: onSkip,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TourStep {
+  const _TourStep({
+    required this.title,
+    required this.message,
+    required this.alignment,
+  });
+
+  final String title;
+  final String message;
+  final Alignment alignment;
+}
+
+class _TourCard extends StatelessWidget {
+  const _TourCard({
+    required this.title,
+    required this.message,
+    required this.step,
+    required this.total,
+    required this.onNext,
+    required this.onSkip,
+  });
+
+  final String title;
+  final String message;
+  final int step;
+  final int total;
+  final VoidCallback onNext;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(message, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Step $step of $total', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Row(
+                  children: [
+                    TextButton(onPressed: onSkip, child: const Text('Skip')),
+                    const SizedBox(width: 8),
+                    ElevatedButton(onPressed: onNext, child: Text(step == total ? 'Done' : 'Next')),
+                  ],
+                ),
+              ],
             ),
           ],
         ),

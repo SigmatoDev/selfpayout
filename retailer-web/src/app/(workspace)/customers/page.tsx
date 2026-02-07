@@ -65,21 +65,25 @@ const CustomersPage = () => {
           ) : customers.length === 0 ? (
             <li className="rounded-xl bg-black/30 px-3 py-3 text-center text-slate-400">No customers yet.</li>
           ) : (
-            customers.map((customer) => (
-              <li key={customer.id} className="flex items-center justify-between rounded-xl bg-black/30 px-3 py-3">
-                <div>
-                  <p className="font-medium text-white">{customer.name}</p>
-                  <p className="text-xs text-slate-400">{customer.phone}</p>
-                  {customer.email ? <p className="text-xs text-slate-500">{customer.email}</p> : null}
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-400">Balance</p>
-                  <p className={`text-sm font-semibold ${customer.balanceAmount > 0 ? 'text-yellow-300' : 'text-[color:var(--green)]'}`}>
-                    {customer.balanceAmount > 0 ? `₹${customer.balanceAmount}` : 'Settled'}
-                  </p>
-                </div>
-              </li>
-            ))
+            customers.map((customer) => {
+              const displayName = customer.name?.trim() ? customer.name : 'Unknown';
+              const displayPhone = customer.phone?.trim() ? customer.phone : '—';
+              return (
+                <li key={customer.id} className="flex items-center justify-between rounded-xl bg-black/30 px-3 py-3">
+                  <div>
+                    <p className="font-medium text-white">{displayName}</p>
+                    <p className="text-xs text-slate-400">{displayPhone}</p>
+                    {customer.email ? <p className="text-xs text-slate-500">{customer.email}</p> : null}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">Balance</p>
+                    <p className={`text-sm font-semibold ${customer.balanceAmount > 0 ? 'text-yellow-300' : 'text-[color:var(--green)]'}`}>
+                      {customer.balanceAmount > 0 ? `₹${customer.balanceAmount}` : 'Settled'}
+                    </p>
+                  </div>
+                </li>
+              );
+            })
           )}
         </ul>
       </div>

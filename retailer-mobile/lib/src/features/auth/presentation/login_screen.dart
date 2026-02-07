@@ -5,8 +5,8 @@ import '../../../core/di/providers.dart';
 import '../../../core/language/language_controller.dart';
 import '../controller/auth_controller.dart';
 
-const _demoEmail = 'demo@shop.com';
-const _demoPassword = 'Retail@123';
+const _demoPhone = '9876543210';
+const _demoOtp = '123456';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({
@@ -26,21 +26,21 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: _demoEmail);
-  final _passwordController = TextEditingController(text: _demoPassword);
+  final _phoneController = TextEditingController(text: _demoPhone);
+  final _otpController = TextEditingController(text: _demoOtp);
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _phoneController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    await ref.read(authControllerProvider.notifier).login(
-          _emailController.text.trim(),
-          _passwordController.text.trim(),
+    await ref.read(authControllerProvider.notifier).loginWithOtp(
+          _phoneController.text.trim(),
+          _otpController.text.trim(),
         );
   }
 
@@ -119,33 +119,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const SizedBox(height: 32),
                           TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
                             decoration: const InputDecoration(
-                              labelText: 'Shop email',
-                              hintText: 'you@shop.com',
+                              labelText: 'Phone number',
+                              hintText: '9876543210',
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Email is required';
-                              }
-                              if (!value.contains('@')) {
-                                return 'Enter a valid email';
+                                return 'Phone number is required';
                               }
                               return null;
                             },
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
-                            controller: _passwordController,
-                            obscureText: true,
+                            controller: _otpController,
+                            keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
-                              labelText: 'Password',
-                              hintText: '••••••',
+                              labelText: 'OTP',
+                              hintText: '123456',
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Password is required';
+                                return 'OTP is required';
                               }
                               return null;
                             },

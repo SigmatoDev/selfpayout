@@ -5,7 +5,7 @@ import { env } from '../config/env.js';
 
 export interface AuthenticatedUser {
   id: string;
-  role: 'SUPER_ADMIN' | 'RETAILER_ADMIN' | 'RETAILER_STAFF';
+  role: 'SUPER_ADMIN' | 'RETAILER_ADMIN' | 'RETAILER_STAFF' | 'CONSUMER';
   retailerId?: string;
 }
 

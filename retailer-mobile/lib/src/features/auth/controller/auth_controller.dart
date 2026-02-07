@@ -24,10 +24,10 @@ class AuthController extends AsyncNotifier<CurrentUser?> {
     }
   }
 
-  Future<void> login(String email, String password) async {
+  Future<void> loginWithOtp(String phone, String otp) async {
     state = const AsyncLoading();
     try {
-      final result = await ref.read(retailerApiProvider).login(email, password);
+      final result = await ref.read(retailerApiProvider).loginWithOtp(phone, otp);
       await ref.read(tokenStorageProvider).save(result.token);
       state = AsyncData(result.user);
     } on ApiException catch (error, stackTrace) {

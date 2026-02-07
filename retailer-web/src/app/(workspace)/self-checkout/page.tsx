@@ -23,6 +23,10 @@ interface CheckoutSession {
   retailerId: string;
   status: SessionStatus | 'IN_PROGRESS' | 'CANCELLED';
   customerPhone?: string | null;
+  tableNumber?: string | null;
+  guestCount?: number | null;
+  serviceChargePct?: number | null;
+  preferredPaymentMode?: 'CASH' | 'UPI' | 'CARD' | null;
   securityCode: string;
   totalAmount: number;
   createdAt: string;
@@ -119,8 +123,10 @@ const SelfCheckoutPage = () => {
             key={filter}
             type="button"
             onClick={() => setStatus(filter)}
-            className={`rounded-full px-3 py-1 ${
-              status === filter ? 'bg-[color:var(--green)] text-slate-900' : 'bg-slate-800 text-slate-200'
+            className={`rounded-full px-3 py-1 font-semibold ${
+              status === filter
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                : 'bg-slate-100 text-slate-600 border border-slate-200'
             }`}
           >
             {filter.toLowerCase()}
@@ -148,17 +154,17 @@ const SelfCheckoutPage = () => {
 
             return (
               <article key={session.id} className="space-y-3 rounded-2xl bg-white/10 p-4 shadow-lg text-sm">
-                <header className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-wide text-slate-400">
+                <header className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-wide text-slate-500">
                   <span>
                     Session #{session.id.slice(0, 8)} • {new Date(session.createdAt).toLocaleTimeString()}
                   </span>
                   <span
-                    className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                    className={`rounded-full px-2 py-1 text-[11px] font-semibold border ${
                       session.status === 'APPROVED'
-                        ? 'bg-green-200/10 text-green-300'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : session.status === 'PAID'
-                          ? 'bg-blue-200/10 text-blue-300'
-                          : 'bg-amber-200/10 text-amber-300'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
                     }`}
                   >
                     {session.status.toLowerCase()}
@@ -169,6 +175,12 @@ const SelfCheckoutPage = () => {
                   <p>
                     Store type: <span className="font-medium text-white">{storeLabel}</span>
                   </p>
+                  {session.tableNumber ? (
+                    <p className="mt-1">
+                      Table {session.tableNumber}
+                      {session.guestCount ? ` • ${session.guestCount} guests` : ''}
+                    </p>
+                  ) : null}
                   {contextEntries.length > 0 ? (
                     <ul className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-400">
                       {contextEntries.map(([key, value]) => (
@@ -231,7 +243,7 @@ const SelfCheckoutPage = () => {
                         type="button"
                         onClick={() => markPaymentMutation.mutate(session.id)}
                         disabled={markPaymentMutation.isPending}
-                        className="rounded-md bg-[color:var(--green)] px-3 py-2 font-semibold text-slate-900 disabled:cursor-not-allowed disabled:opacity-70"
+                        className="rounded-full bg-[color:var(--green)] px-4 py-2 font-semibold text-slate-900 shadow hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {markPaymentMutation.isPending ? 'Marking...' : 'Mark payment received'}
                       </button>

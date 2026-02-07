@@ -10,7 +10,9 @@ const navigation = [
   { href: '/', label: 'Dashboard' },
   { href: '/retailers', label: 'Retailers' },
   { href: '/subscriptions', label: 'Plans' },
-  { href: '/kyc', label: 'KYC Reviews' }
+  { href: '/kyc', label: 'KYC Reviews' },
+  { href: '/ticketing', label: 'Ticketing' },
+  { href: '/marketplace', label: 'Marketplace' }
 ];
 
 const Sidebar = () => {

@@ -9,7 +9,8 @@ import type {
   SessionPaymentInput,
   SessionStartInput,
   SessionSubmitInput,
-  SessionVerifyInput
+  SessionVerifyInput,
+  SessionTableInput
 } from './session.schema.js';
 
 const generateSecurityCode = () => {
@@ -20,6 +21,7 @@ const generateSecurityCode = () => {
 type SessionTotals = {
   subtotal: number;
   tax: number;
+  serviceCharge: number;
   total: number;
 };
 
@@ -27,6 +29,11 @@ export const startSelfCheckoutSession = async ({
   retailerCode,
   customerPhone,
   storeType = 'KIRANA',
+  tableNumber,
+  guestCount,
+  serviceChargePct = 0,
+  preferredPaymentMode,
+  groupOrder,
   context
 }: SessionStartInput) => {
   const retailer = await prisma.retailer.findFirst({
@@ -34,6 +41,7 @@ export const startSelfCheckoutSession = async ({
       status: 'ACTIVE',
       OR: [
         { id: retailerCode },
+        { retailerCode },
         { contactEmail: retailerCode },
         { shopName: { equals: retailerCode, mode: 'insensitive' } }
       ]
@@ -52,16 +60,55 @@ export const startSelfCheckoutSession = async ({
     throw error;
   }
 
+  // tableNumber is optional in payload but strongly recommended for restaurants.
+
   return (prisma as any).selfCheckoutSession.create({
     data: {
       retailerId: retailer.id,
       customerPhone: customerPhone ?? null,
       status: 'IN_PROGRESS',
       storeType,
+      tableNumber: tableNumber ?? null,
+      guestCount: guestCount ?? null,
+      serviceChargePct,
+      preferredPaymentMode: preferredPaymentMode ?? null,
+      context: {
+        ...(context ?? {}),
+        groupOrder: groupOrder ?? false
+      },
       securityCode: generateSecurityCode(),
-      context: context ?? undefined
     },
     include: { items: true }
+  });
+};
+
+export const updateSessionTable = async (sessionId: string, payload: SessionTableInput) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const session = await (tx as any).selfCheckoutSession.findUnique({
+      where: { id: sessionId },
+      include: { items: true, retailer: { select: { shopName: true } }, invoice: { include: { items: true } } }
+    });
+
+    if (!session) {
+      const error = new Error('Session not found');
+      error.name = 'NotFoundError';
+      throw error;
+    }
+
+    if (['PAID', 'APPROVED', 'CANCELLED'].includes(session.status)) {
+      const error = new Error('Cannot update table for a completed session');
+      error.name = 'InvalidSessionState';
+      throw error;
+    }
+
+    return (tx as any).selfCheckoutSession.update({
+      where: { id: sessionId },
+      data: {
+        tableNumber: payload.tableNumber,
+        guestCount: payload.guestCount ?? session.guestCount
+      },
+      include: { items: true, retailer: { select: { shopName: true } }, invoice: { include: { items: true } } }
+    });
   });
 };
 
@@ -78,7 +125,7 @@ export const addItemToSession = async (sessionId: string, item: SessionItemInput
       throw error;
     }
 
-    if (session.status !== 'IN_PROGRESS') {
+    if (!['IN_PROGRESS', 'SUBMITTED'].includes(session.status)) {
       const error = new Error('Cannot modify a completed session');
       error.name = 'InvalidSessionState';
       throw error;
@@ -99,23 +146,34 @@ export const addItemToSession = async (sessionId: string, item: SessionItemInput
       name = inventoryItem.name;
     }
 
-    await (tx as any).selfCheckoutItem.create({
-      data: {
-        sessionId,
-        inventoryItemId: inventoryItem?.id,
-        sku: item.sku,
-        name,
-        quantity: item.quantity,
-        price,
-        taxPercentage: item.taxPercentage
-      }
-    });
+    const existing = session.items.find((i: any) => i.sku === item.sku);
+    if (existing) {
+      await (tx as any).selfCheckoutItem.update({
+        where: { id: existing.id },
+        data: {
+          quantity: existing.quantity + item.quantity,
+          price
+        }
+      });
+    } else {
+      await (tx as any).selfCheckoutItem.create({
+        data: {
+          sessionId,
+          inventoryItemId: inventoryItem?.id,
+          sku: item.sku,
+          name,
+          quantity: item.quantity,
+          price,
+          taxPercentage: item.taxPercentage
+        }
+      });
+    }
 
     const items = await (tx as any).selfCheckoutItem.findMany({ where: { sessionId } });
     const totals = calculateTotals(
-      items as Array<{ price: number; quantity: number; taxPercentage: number }>
+      items as Array<{ price: number; quantity: number; taxPercentage: number }>,
+      session.serviceChargePct ?? 0
     );
-    totals.total = totals.subtotal + totals.tax;
 
     const updatedSession = await (tx as any).selfCheckoutSession.update({
       where: { id: sessionId },
@@ -140,7 +198,7 @@ export const removeItemFromSession = (sessionId: string, itemId: string) =>
       throw error;
     }
 
-    if (session.status !== 'IN_PROGRESS') {
+    if (!['IN_PROGRESS', 'SUBMITTED'].includes(session.status)) {
       const error = new Error('Cannot modify a completed session');
       error.name = 'InvalidSessionState';
       throw error;
@@ -161,9 +219,9 @@ export const removeItemFromSession = (sessionId: string, itemId: string) =>
     });
 
     const totals = calculateTotals(
-      remainingItems as Array<{ price: number; quantity: number; taxPercentage: number }>
+      remainingItems as Array<{ price: number; quantity: number; taxPercentage: number }>,
+      session.serviceChargePct ?? 0
     );
-    totals.total = totals.subtotal + totals.tax;
 
     return (tx as any).selfCheckoutSession.update({
       where: { id: sessionId },
@@ -253,6 +311,10 @@ export const listSelfCheckoutSessions = async (filters: SessionListInput, retail
     where.storeType = filters.storeType;
   }
 
+  if (filters.tableNumber) {
+    where.tableNumber = filters.tableNumber;
+  }
+
   return (prisma as any).selfCheckoutSession.findMany({
     where,
     include: {
@@ -264,8 +326,11 @@ export const listSelfCheckoutSessions = async (filters: SessionListInput, retail
   });
 };
 
-const calculateTotals = (items: Array<{ price: number; quantity: number; taxPercentage: number }>) => {
-  return items.reduce<SessionTotals>(
+const calculateTotals = (
+  items: Array<{ price: number; quantity: number; taxPercentage: number }>,
+  serviceChargePct = 0
+) => {
+  const { subtotal, tax } = items.reduce<Pick<SessionTotals, 'subtotal' | 'tax'>>(
     (acc, item) => {
       const lineSubtotal = item.price * item.quantity;
       const lineTax = (lineSubtotal * item.taxPercentage) / 100;
@@ -273,8 +338,13 @@ const calculateTotals = (items: Array<{ price: number; quantity: number; taxPerc
       acc.tax += lineTax;
       return acc;
     },
-    { subtotal: 0, tax: 0, total: 0 }
+    { subtotal: 0, tax: 0 }
   );
+
+  const serviceCharge = (subtotal * serviceChargePct) / 100;
+  const total = subtotal + tax + serviceCharge;
+
+  return { subtotal, tax, serviceCharge, total };
 };
 
 export const markSessionPaid = async (
@@ -329,8 +399,7 @@ export const markSessionPaid = async (
       taxPercentage: item.taxPercentage
     }));
 
-    const totals = calculateTotals(invoiceItems);
-    totals.total = totals.subtotal + totals.tax;
+    const totals = calculateTotals(invoiceItems, session.serviceChargePct ?? 0);
 
     const invoice = await tx.invoice.create({
       data: {

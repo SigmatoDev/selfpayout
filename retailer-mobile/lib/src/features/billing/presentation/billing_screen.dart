@@ -10,6 +10,15 @@ import '../../../core/language/language_controller.dart';
 import '../../../core/network/api_client.dart';
 import '../../../models/models.dart';
 import '../../auth/controller/auth_controller.dart';
+import '../../orders/presentation/counter_order_screen.dart';
+import '../../ticketing/presentation/self_ticketing_screen.dart';
+import '../../ticketing/presentation/ticket_order_detail_screen.dart';
+import '../../orders/presentation/self_billing_create_order_screen.dart';
+import '../../orders/presentation/marketplace_order_detail_screen.dart';
+import '../../orders/presentation/self_checkout_session_detail_screen.dart';
+import '../../orders/presentation/counter_order_detail_screen.dart';
+import '../../orders/presentation/counter_order_models.dart';
+import '../../orders/presentation/self_billing_order_detail_screen.dart';
 import '../../workspace/workspace_providers.dart';
 import '../../inventory/presentation/barcode_scanner_sheet.dart';
 
@@ -25,6 +34,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   final _customerPhoneController = TextEditingController();
 
   final List<_CartItem> _cart = [];
+  int _orderTabIndex = 0;
   PaymentMode _paymentMode = PaymentMode.cash;
   bool _isSubmitting = false;
   InvoiceResult? _lastInvoice;
@@ -48,27 +58,230 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final inventoryAsync = ref.watch(inventoryProvider);
-    final customersAsync = ref.watch(customersProvider);
-    final strings = ref.watch(languageStringsProvider);
-    final offlineQueue = ref.watch(offlineQueueControllerProvider);
-    final categoryMap = _groupInventoryByCategory(inventoryAsync.valueOrNull ?? []);
-
+    final orderStatus = _orderTabIndex == 0 ? SessionStatus.submitted : SessionStatus.approved;
+    final sessionsAsync = ref.watch(selfCheckoutSessionsProvider(orderStatus));
+    final user = ref.watch(authControllerProvider).valueOrNull;
+    final retailerId = user?.retailerId;
+    final ticketOrdersAsync =
+        retailerId == null ? const AsyncValue<List<TicketOrder>>.data([]) : ref.watch(ticketOrdersProvider(retailerId));
+    final marketplaceOrdersAsync = retailerId == null
+        ? const AsyncValue<List<MarketplaceOrder>>.data([])
+        : ref.watch(marketplaceOrdersProvider(retailerId));
+    final counterOrdersAsync = ref.watch(counterOrdersProvider);
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(inventoryProvider),
+      onRefresh: () async {
+        ref.invalidate(selfCheckoutSessionsProvider(SessionStatus.submitted));
+        ref.invalidate(selfCheckoutSessionsProvider(SessionStatus.approved));
+      },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 8).copyWith(bottom: 120),
         children: [
-          _buildSearchBar(inventoryAsync, strings, categoryMap),
+          _buildOrdersSection(context, sessionsAsync),
           const SizedBox(height: 16),
-          _buildCartSection(strings),
+          _TicketOrdersSection(
+            ordersAsync: ticketOrdersAsync,
+            onOpen: (order) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => TicketOrderDetailScreen(order: order)),
+              );
+            },
+          ),
           const SizedBox(height: 16),
-          _buildPaymentSection(customersAsync),
+          _SelfBillingOrdersSection(
+            sessionsAsync: sessionsAsync,
+            onOpen: (session) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => SelfCheckoutSessionDetailScreen(session: session)),
+              );
+            },
+            onCreate: () {
+              Navigator.of(context)
+                  .push<SelfBillingOrder>(
+                    MaterialPageRoute(
+                      builder: (_) => const SelfBillingCreateOrderScreen(),
+                    ),
+                  )
+                  .then((order) {
+                if (order == null) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Order created locally.')),
+                );
+              });
+            },
+          ),
           const SizedBox(height: 16),
-          _buildTotalsSection(strings, offlineQueue.length),
+          _MarketplaceOrdersSection(
+            ordersAsync: marketplaceOrdersAsync,
+            onOpen: (order) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => MarketplaceOrderDetailScreen(order: order)),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          _CounterOrdersSection(
+            ordersAsync: counterOrdersAsync,
+            onOpen: (order) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => CounterOrderDetailScreen(order: order)),
+              );
+            },
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOrdersSection(BuildContext context, AsyncValue<List<CheckoutSession>> sessionsAsync) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Orders', style: Theme.of(context).textTheme.titleMedium),
+                OutlinedButton.icon(
+                  onPressed: () => _openCounterOrder(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Take order'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 0, label: Text('New')),
+                ButtonSegment(value: 1, label: Text('Accepted')),
+              ],
+              selected: {_orderTabIndex},
+              onSelectionChanged: (selection) => setState(() => _orderTabIndex = selection.first),
+            ),
+            const SizedBox(height: 12),
+            sessionsAsync.when(
+              data: (sessions) {
+                if (sessions.isEmpty) {
+                  return const Text(
+                    'No orders received yet.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  );
+                }
+                return Column(
+                  children: sessions
+                      .map(
+                        (session) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                            child: const Icon(Icons.receipt_long),
+                          ),
+                          title: Text(session.customerPhone ?? 'Walk-in'),
+                          subtitle: Text(
+                            '${session.id.substring(0, 8)} • ${session.tableNumber ?? 'Counter'}',
+                          ),
+                          trailing: Wrap(
+                            spacing: 8,
+                            children: [
+                              const _OrderSourceChip(source: _OrderSource.qr),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => SelfCheckoutSessionDetailScreen(session: session),
+                                    ),
+                                  );
+                                },
+                                child: const Text('View'),
+                              ),
+                              IconButton(
+                                tooltip: 'Print',
+                                icon: const Icon(Icons.print),
+                                onPressed: () => _showPrintPreview(context, session),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, _) => Text(
+                error.toString(),
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPrintPreview(BuildContext context, CheckoutSession order) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Print preview'),
+          content: SizedBox(
+            width: 280,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Order ${order.id}', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text('Customer: ${order.customerPhone ?? 'Walk-in'}'),
+                Text('Table: ${order.tableNumber ?? 'Counter'}'),
+                const Divider(height: 24),
+                ...order.items.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(item.name)),
+                        Text('x${item.quantity}'),
+                        const SizedBox(width: 8),
+                        Text('₹${(item.price * item.quantity).toStringAsFixed(2)}'),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total'),
+                    Text('₹${order.totalAmount.toStringAsFixed(2)}'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Sent to carbon printer.')),
+                );
+              },
+              icon: const Icon(Icons.print),
+              label: const Text('Print'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -102,28 +315,29 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                 ),
               ),
             ],
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Items', style: Theme.of(context).textTheme.titleSmall),
+                IconButton(
+                  tooltip: 'Scan barcode',
+                  icon: const Icon(Icons.qr_code_scanner),
+                  onPressed: _handleScanBarcode,
+                ),
+              ],
+            ),
             TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 labelText: 'Scan barcode or search item',
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'Scan barcode',
-                      icon: const Icon(Icons.qr_code_scanner),
-                      onPressed: _handleScanBarcode,
-                    ),
-                    if (_searchController.text.isNotEmpty)
-                      IconButton(
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => setState(() {
                           _searchController.clear();
                         }),
-                      ),
-                  ],
-                ),
-                suffixIconConstraints: const BoxConstraints(minHeight: 0, minWidth: 0),
+                      )
+                    : null,
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -721,6 +935,28 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       });
     }
   }
+
+  void _openCounterOrder(BuildContext context) {
+    showDialog<_CounterCustomerPayload>(
+      context: context,
+      builder: (context) => const _CounterCustomerDialog(),
+    ).then((payload) {
+      if (payload == null) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CounterOrderScreen(
+            customerName: payload.name,
+            customerPhone: payload.phone,
+            onSubmit: (order) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Counter order captured.')),
+              );
+            },
+          ),
+        ),
+      );
+    });
+  }
 }
 
 class _Totals {
@@ -752,4 +988,532 @@ class _CartItem {
         quantity: quantity ?? this.quantity,
         taxPercentage: taxPercentage,
       );
+}
+
+class _OrderStatusChip extends StatelessWidget {
+  const _OrderStatusChip({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(status, style: theme.textTheme.labelSmall),
+    );
+  }
+}
+
+enum _OrderSource { qr, counter }
+
+class _OrderSourceChip extends StatelessWidget {
+  const _OrderSourceChip({required this.source});
+
+  final _OrderSource source;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isCounter = source == _OrderSource.counter;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isCounter
+            ? const Color(0xFFFDE68A)
+            : theme.colorScheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        isCounter ? 'CO' : 'QR',
+        style: theme.textTheme.labelSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketingCard extends StatelessWidget {
+  const _TicketingCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF111827), Color(0xFF1F2937)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+              ),
+              child: const Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 30),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Self ticketing',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Browse events, manage tickets, and capture bookings.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white70,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketOrdersSection extends StatelessWidget {
+  const _TicketOrdersSection({required this.ordersAsync, required this.onOpen});
+
+  final AsyncValue<List<TicketOrder>> ordersAsync;
+  final ValueChanged<TicketOrder> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Latest ticket orders', style: Theme.of(context).textTheme.titleMedium),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SelfTicketingScreen()),
+                    );
+                  },
+                  child: const Text('Buy ticket'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ordersAsync.when(
+              data: (orders) {
+                if (orders.isEmpty) {
+                  return const Text(
+                    'No ticket orders yet.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  );
+                }
+                return Column(
+                  children: orders
+                      .map(
+                        (order) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                            child: const Icon(Icons.confirmation_number_outlined),
+                          ),
+                          title: Text(order.buyerPhone),
+                          subtitle: Text('${order.orderId} • ${order.eventName}'),
+                          trailing: _TicketOrderStatus(status: order.status),
+                          onTap: () => onOpen(order),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, _) => Text(
+                error.toString(),
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketOrderStatus extends StatelessWidget {
+  const _TicketOrderStatus({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(status, style: theme.textTheme.labelSmall),
+    );
+  }
+}
+
+class _SelfBillingOrdersSection extends StatelessWidget {
+  const _SelfBillingOrdersSection({
+    required this.sessionsAsync,
+    required this.onOpen,
+    required this.onCreate,
+  });
+
+  final AsyncValue<List<CheckoutSession>> sessionsAsync;
+  final ValueChanged<CheckoutSession> onOpen;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Latest self billing orders', style: Theme.of(context).textTheme.titleMedium),
+                TextButton(
+                  onPressed: onCreate,
+                  child: const Text('Create order'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            sessionsAsync.when(
+              data: (sessions) {
+                if (sessions.isEmpty) {
+                  return const Text(
+                    'No self billing orders yet.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  );
+                }
+                return Column(
+                  children: sessions
+                      .map(
+                        (session) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                            child: const Icon(Icons.qr_code),
+                          ),
+                          title: Text(session.customerPhone ?? 'Walk-in'),
+                          subtitle: Text('${session.id.substring(0, 8)} • ${session.items.length} items'),
+                          trailing: _TicketOrderStatus(status: session.status.apiValue),
+                          onTap: () => onOpen(session),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, _) => Text(
+                error.toString(),
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarketplaceOrdersSection extends StatelessWidget {
+  const _MarketplaceOrdersSection({required this.ordersAsync, required this.onOpen});
+
+  final AsyncValue<List<MarketplaceOrder>> ordersAsync;
+  final ValueChanged<MarketplaceOrder> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Latest marketplace orders', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            ordersAsync.when(
+              data: (orders) {
+                if (orders.isEmpty) {
+                  return const Text(
+                    'No marketplace orders yet.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  );
+                }
+                return Column(
+                  children: orders
+                      .map(
+                        (order) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                            child: const Icon(Icons.local_shipping_outlined),
+                          ),
+                          title: Text(order.customerPhone),
+                          subtitle: Text('${order.orderId} • ${order.status}'),
+                          trailing: _TicketOrderStatus(status: order.status),
+                          onTap: () => onOpen(order),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, _) => Text(
+                error.toString(),
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CounterOrdersSection extends StatelessWidget {
+  const _CounterOrdersSection({required this.ordersAsync, required this.onOpen});
+
+  final AsyncValue<List<CounterOrder>> ordersAsync;
+  final ValueChanged<CounterOrder> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Counter orders', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            ordersAsync.when(
+              data: (orders) {
+                if (orders.isEmpty) {
+                  return const Text(
+                    'No counter orders yet.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  );
+                }
+                return Column(
+                  children: orders
+                      .map(
+                        (order) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                            child: const Icon(Icons.point_of_sale),
+                          ),
+                          title: Text(order.customerPhone ?? 'Walk-in'),
+                          subtitle: Text('${order.id.substring(0, 8)} • ${order.status}'),
+                          trailing: _TicketOrderStatus(status: order.status),
+                          onTap: () => onOpen(order),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, _) => Text(
+                error.toString(),
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CounterCustomerPayload {
+  const _CounterCustomerPayload({required this.name, required this.phone});
+
+  final String name;
+  final String phone;
+}
+
+class _CounterCustomerDialog extends StatefulWidget {
+  const _CounterCustomerDialog();
+
+  @override
+  State<_CounterCustomerDialog> createState() => _CounterCustomerDialogState();
+}
+
+class _CounterCustomerDialogState extends State<_CounterCustomerDialog> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _otpController = TextEditingController();
+  bool _validated = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Customer verification'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Customer name (optional)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phoneController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Phone number',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _otpController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'OTP',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: _validateOtp,
+                child: const Text('Validate'),
+              ),
+            ],
+          ),
+          if (_validated)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 16),
+                  SizedBox(width: 6),
+                  Text('OTP verified'),
+                ],
+              ),
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _validated ? _submit : null,
+          child: const Text('Continue'),
+        ),
+      ],
+    );
+  }
+
+  void _validateOtp() {
+    setState(() => _error = null);
+    if (_phoneController.text.trim().isEmpty) {
+      setState(() => _error = 'Enter phone number first.');
+      return;
+    }
+    if (_otpController.text.trim() != '1234') {
+      setState(() => _error = 'Invalid OTP. Use 1234 for now.');
+      return;
+    }
+    setState(() => _validated = true);
+  }
+
+  void _submit() {
+    final phone = _phoneController.text.trim();
+    final name = _nameController.text.trim().isEmpty ? 'Walk-in customer' : _nameController.text.trim();
+    Navigator.of(context).pop(_CounterCustomerPayload(name: name, phone: phone));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Customer saved.')),
+    );
+  }
 }

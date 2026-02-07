@@ -11,7 +11,16 @@ export const errorHandler = (err: ApiError, _req: Request, res: Response, _next:
     return res.status(400).json({ message: 'Validation failed', issues: err.issues });
   }
 
-  const status = err.status ?? 500;
+  const statusMap: Record<string, number> = {
+    AuthError: 401,
+    ForbiddenError: 403,
+    NotFoundError: 404,
+    ConflictError: 409,
+    ValidationError: 400,
+    InvalidSessionState: 409
+  };
+
+  const status = err.status ?? statusMap[err.name] ?? 500;
   const payload: Record<string, unknown> = { message: err.message ?? 'Internal server error' };
 
   if (err.details) {

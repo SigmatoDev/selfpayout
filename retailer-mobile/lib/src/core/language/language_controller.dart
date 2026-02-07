@@ -24,8 +24,11 @@ enum TranslationKey {
   customers,
   reports,
   collectPayment,
+  orders,
   offlinePending,
   selfCheckout,
+  menu,
+  tables,
 }
 
 const Map<SupportedLanguage, Map<TranslationKey, String>> _translations = {
@@ -36,8 +39,11 @@ const Map<SupportedLanguage, Map<TranslationKey, String>> _translations = {
     TranslationKey.customers: 'Customers',
     TranslationKey.reports: 'Reports',
     TranslationKey.collectPayment: 'Collect payment',
+    TranslationKey.orders: 'Orders',
     TranslationKey.offlinePending: 'bills waiting to sync',
     TranslationKey.selfCheckout: 'Self checkout',
+    TranslationKey.menu: 'Menu',
+    TranslationKey.tables: 'Tables',
   },
   SupportedLanguage.hi: {
     TranslationKey.welcome: 'नमस्ते',
@@ -46,8 +52,11 @@ const Map<SupportedLanguage, Map<TranslationKey, String>> _translations = {
     TranslationKey.customers: 'ग्राहक',
     TranslationKey.reports: 'रिपोर्ट',
     TranslationKey.collectPayment: 'भुगतान प्राप्त करें',
+    TranslationKey.orders: 'ऑर्डर',
     TranslationKey.offlinePending: 'सिंक के लिए बिल लंबित',
     TranslationKey.selfCheckout: 'स्वयं चेकआउट',
+    TranslationKey.menu: 'मेन्यू',
+    TranslationKey.tables: 'टेबल',
   },
   SupportedLanguage.ka: {
     TranslationKey.welcome: 'ನಮಸ್ಕಾರ',
@@ -56,8 +65,11 @@ const Map<SupportedLanguage, Map<TranslationKey, String>> _translations = {
     TranslationKey.customers: 'ಗ್ರಾಹಕರು',
     TranslationKey.reports: 'ವರದಿಗಳು',
     TranslationKey.collectPayment: 'ಪಾವತಿ ಸಂಗ್ರಹಣೆ',
+    TranslationKey.orders: 'ಆರ್ಡರ್ಸ್',
     TranslationKey.offlinePending: 'ಸಿಂಕ್‌ಗೆ ಕಾಯುವ ಬಿಲ್ಲುಗಳು',
     TranslationKey.selfCheckout: 'ಸ್ವಯಂ ಪಾವತಿ',
+    TranslationKey.menu: 'ಮೆನು',
+    TranslationKey.tables: 'ಮೇಜುಗಳು',
   },
 };
 
@@ -97,6 +109,7 @@ class LanguageController extends StateNotifier<SupportedLanguage> {
         }
       }
     }
+    prefs.setString(_storageKey, SupportedLanguage.en.code);
     return SupportedLanguage.en;
   }
 }

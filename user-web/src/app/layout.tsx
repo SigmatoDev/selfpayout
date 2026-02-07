@@ -7,7 +7,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Selfcheckout Express',
+  title: 'Selfpayout',
   description: 'Scan, bag, and pay from your phone.'
 };
 
@@ -26,11 +26,29 @@ const themeHydrationScript = `
   }
 })();`.trim();
 
+const unionIdHydrationScript = `
+(function() {
+  try {
+    var storageKey = 'selfcheckout-union-id';
+    var existing = window.localStorage.getItem(storageKey);
+    if (existing) return;
+    var id = (window.crypto && window.crypto.randomUUID)
+      ? window.crypto.randomUUID()
+      : 'uid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    window.localStorage.setItem(storageKey, id);
+  } catch (error) {
+    // No-op if storage is unavailable.
+  }
+})();`.trim();
+
 const RootLayout = ({ children }: { children: React.ReactNode }) => (
   <html lang="en">
     <body className={inter.className}>
       <script dangerouslySetInnerHTML={{ __html: themeHydrationScript }} />
-      <Providers>{children}</Providers>
+      <script dangerouslySetInnerHTML={{ __html: unionIdHydrationScript }} />
+      <Providers>
+        <main className="flex min-h-screen w-screen flex-1 flex-col px-0 py-6">{children}</main>
+      </Providers>
     </body>
   </html>
 );

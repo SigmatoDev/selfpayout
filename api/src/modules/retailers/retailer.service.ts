@@ -16,6 +16,17 @@ const generateTemporaryPassword = () => {
 };
 
 const hashPassword = async (plaintext: string) => bcrypt.hash(plaintext, BCRYPT_ROUNDS);
+const RETAILER_CODE_PREFIX = 'RET';
+const RETAILER_CODE_PAD = 4;
+const nextRetailerCode = async () => {
+  const sequence = await prisma.sequence.upsert({
+    where: { key: 'retailer' },
+    create: { key: 'retailer', value: 1 },
+    update: { value: { increment: 1 } }
+  });
+
+  return `${RETAILER_CODE_PREFIX}${String(sequence.value).padStart(RETAILER_CODE_PAD, '0')}`;
+};
 const slugify = (value: string) =>
   value
     .trim()
@@ -71,14 +82,28 @@ export const listRetailers = async (params: { status?: string; search?: string }
   });
 };
 
+export const listPublicRetailers = async () => {
+  return prisma.retailer.findMany({
+    where: { status: 'ACTIVE' },
+    select: {
+      id: true,
+      shopName: true,
+      storeType: true
+    },
+    orderBy: { shopName: 'asc' }
+  });
+};
+
 export const createRetailer = async (input: RetailerCreateInput) => {
   const { temporaryPassword, ...data } = input;
   const generatedPassword = temporaryPassword ?? generateTemporaryPassword();
   const passwordHash = await hashPassword(generatedPassword);
+  const retailerCode = await nextRetailerCode();
 
   const retailer = await (prisma.retailer as any).create({
     data: {
       ...data,
+      retailerCode,
       status: 'PENDING_ONBOARDING',
       users: {
         create: {
@@ -134,8 +159,12 @@ export const submitRetailerOnboarding = async (input: RetailerSignupInput) => {
     persistSignupDocument(input.shopName, 'pan', input.documents.pan)
   ]);
 
+  const passwordHash = await hashPassword(input.password);
+  const retailerCode = await nextRetailerCode();
+
   const retailer = await (prisma.retailer as any).create({
     data: {
+      retailerCode,
       name: input.ownerName,
       shopName: input.shopName,
       contactEmail: input.contactEmail,
@@ -144,8 +173,19 @@ export const submitRetailerOnboarding = async (input: RetailerSignupInput) => {
       gstEnabled: input.gstEnabled,
       gstNumber: input.gstNumber ?? null,
       languagePreference: input.languagePreference,
+      storeType: input.storeType ?? 'RESTAURANT',
+      fssaiNumber: input.fssaiNumber ?? null,
+      serviceChargePct: input.serviceChargePct ?? 0,
       subscriptionPlanId: input.subscriptionPlanId ?? null,
       status: 'PENDING_ONBOARDING',
+      users: {
+        create: {
+          name: input.ownerName,
+          email: input.contactEmail,
+          role: 'RETAILER_ADMIN',
+          passwordHash
+        }
+      },
       kyc: {
         create: {
           status: 'PENDING',
@@ -162,7 +202,7 @@ export const submitRetailerOnboarding = async (input: RetailerSignupInput) => {
         }
       }
     },
-    select: { id: true, status: true, createdAt: true }
+    select: { id: true, retailerCode: true, status: true, createdAt: true }
   });
 
   return retailer;

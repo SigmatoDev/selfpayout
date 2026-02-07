@@ -19,8 +19,10 @@ import {
   removeItemFromSession,
   startSelfCheckoutSession,
   submitSession,
-  verifySession
+  verifySession,
+  updateSessionTable
 } from './session.service.js';
+import { sessionTableSchema } from './session.schema.js';
 
 export const startSessionHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const payload = sessionStartSchema.parse(req.body);
@@ -64,7 +66,8 @@ export const listSessionsHandler = asyncHandler(async (req: AuthenticatedRequest
   const filters = sessionListSchema.parse({
     status: req.query.status,
     retailerId: req.query.retailerId,
-    storeType: req.query.storeType
+    storeType: req.query.storeType,
+    tableNumber: req.query.tableNumber
   });
 
   const retailerConstraint =
@@ -84,4 +87,10 @@ export const markPaymentHandler = asyncHandler(async (req: AuthenticatedRequest,
 
   const result = await markSessionPaid(req.params.id, { ...payload, retailerId: retailerId ?? undefined });
   res.json({ data: result });
+});
+
+export const updateSessionTableHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const payload = sessionTableSchema.parse(req.body ?? {});
+  const session = await updateSessionTable(req.params.id, payload);
+  res.json({ data: session });
 });
