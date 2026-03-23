@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 
+import { prisma } from '../../config/prisma.js';
 import { asyncHandler } from '../../lib/asyncHandler.js';
 import { loginSchema, otpLoginSchema } from './auth.schema.js';
 import { login, loginWithOtp } from './auth.service.js';
@@ -22,5 +23,39 @@ export const currentUserHandler = asyncHandler(async (req: AuthenticatedRequest,
     return res.status(401).json({ message: 'Authentication required' });
   }
 
-  res.json({ user: req.user });
+  const actor = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    include: {
+      retailer: {
+        select: {
+          id: true,
+          storeType: true,
+          settings: {
+            select: {
+              selfBillingEnabled: true,
+              marketplaceEnabled: true,
+              tableOrderingEnabled: true,
+              deliveryOrderingEnabled: true,
+              tokenOrderingEnabled: true,
+              ticketingEnabled: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!actor) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  res.json({
+    data: {
+      id: actor.id,
+      name: actor.name,
+      retailerId: actor.retailerId,
+      storeType: actor.retailer?.storeType,
+      settings: actor.retailer?.settings ?? null
+    }
+  });
 });

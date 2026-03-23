@@ -19,6 +19,13 @@ export const listPublicInventory = (params: {
     where: {
       retailerId: params.retailerId,
       category: params.category,
+      retailer: {
+        status: 'ACTIVE',
+        storeType: 'KIRANA',
+        settings: {
+          marketplaceEnabled: true
+        }
+      },
       OR: params.search
         ? [
             { name: { contains: params.search, mode: 'insensitive' } },
@@ -39,6 +46,13 @@ export const listPublicCategories = async (retailerId?: string) => {
   const results = await prisma.inventoryItem.findMany({
     where: {
       retailerId,
+      retailer: {
+        status: 'ACTIVE',
+        storeType: 'KIRANA',
+        settings: {
+          marketplaceEnabled: true
+        }
+      },
       category: { not: null }
     },
     distinct: ['category'],

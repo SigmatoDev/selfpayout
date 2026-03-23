@@ -10,8 +10,11 @@ import type {
   SessionStartInput,
   SessionSubmitInput,
   SessionVerifyInput,
-  SessionTableInput
+  SessionTableInput,
+  SessionFulfillInput
 } from './session.schema.js';
+import { generateKotNumber } from '../kot/kot.service.js';
+import { consumeSelfCheckoutSessionIngredients } from '../restaurant/restaurant-stock.service.js';
 
 const generateSecurityCode = () => {
   const buffer = randomBytes(3).toString('hex').toUpperCase();
@@ -257,9 +260,11 @@ export const submitSession = async (sessionId: string, _payload: SessionSubmitIn
       throw error;
     }
 
+    const kotNumber = session.kotNumber ?? (await generateKotNumber(tx, session.retailerId));
+
     return (tx as any).selfCheckoutSession.update({
       where: { id: sessionId },
-      data: { status: 'SUBMITTED' },
+      data: { status: 'SUBMITTED', kotNumber },
       include: { items: true, retailer: { select: { shopName: true } }, invoice: { include: { items: true } } }
     });
   });
@@ -401,11 +406,26 @@ export const markSessionPaid = async (
 
     const totals = calculateTotals(invoiceItems, session.serviceChargePct ?? 0);
 
+    let customerId: string | undefined;
+    if (session.customerPhone) {
+      const customer = await tx.customer.upsert({
+        where: { retailerId_phone: { retailerId: session.retailerId, phone: session.customerPhone } },
+        update: {},
+        create: {
+          retailerId: session.retailerId,
+          phone: session.customerPhone,
+          name: 'Customer'
+        }
+      });
+      customerId = customer.id;
+    }
+
     const invoice = await tx.invoice.create({
       data: {
         retailerId: session.retailerId,
         paymentMode: payload.paymentMode ?? 'UPI',
         customerPhone: session.customerPhone ?? null,
+        customerId,
         notes: payload.notes ?? `Self-checkout session ${session.securityCode}`,
         subtotalAmount: totals.subtotal,
         taxAmount: totals.tax,
@@ -422,7 +442,8 @@ export const markSessionPaid = async (
       where: { id: sessionId },
       data: {
         status: 'PAID',
-        totalAmount: totals.total
+        totalAmount: totals.total,
+        customerId: session.customerId ?? customerId ?? null
       },
       include: {
         items: true,
@@ -434,3 +455,38 @@ export const markSessionPaid = async (
     return { session: updatedSession, invoice };
   });
 };
+
+export const markSessionFulfilled = async (sessionId: string, payload: SessionFulfillInput) =>
+  prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const session = await (tx as any).selfCheckoutSession.findUnique({
+      where: { id: sessionId },
+      include: { items: true, retailer: { select: { shopName: true } }, invoice: { include: { items: true } } }
+    });
+
+    if (!session) {
+      const error = new Error('Session not found');
+      error.name = 'NotFoundError';
+      throw error;
+    }
+
+    if (!['SUBMITTED', 'APPROVED'].includes(session.status)) {
+      const error = new Error('Session must be submitted before fulfilling');
+      error.name = 'InvalidSessionState';
+      throw error;
+    }
+
+    if (session.fulfilledAt) {
+      return session;
+    }
+
+    await consumeSelfCheckoutSessionIngredients(tx, session.id);
+
+    return (tx as any).selfCheckoutSession.update({
+      where: { id: sessionId },
+      data: {
+        fulfilledAt: new Date(),
+        notes: payload.notes ? payload.notes : session.notes
+      },
+      include: { items: true, retailer: { select: { shopName: true } }, invoice: { include: { items: true } } }
+    });
+  });

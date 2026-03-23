@@ -11,6 +11,7 @@
     "prestart": "npm run build",
     "start": "node dist/server.js",
     "prisma:recover": "tsx scripts/recover-migration.ts",
+    "seed:restaurant": "tsx scripts/seed-restaurant.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "format": "prettier --write src",
     "prisma": "prisma"

@@ -7,6 +7,7 @@ export interface AuthenticatedUser {
   id: string;
   role: 'SUPER_ADMIN' | 'RETAILER_ADMIN' | 'RETAILER_STAFF' | 'CONSUMER';
   retailerId?: string;
+  storeType?: 'KIRANA' | 'RESTAURANT' | 'TRAIN';
 }
 
 export interface AuthenticatedRequest extends Request {

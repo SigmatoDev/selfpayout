@@ -7,9 +7,45 @@ import type { LoginInput, OtpLoginInput } from './auth.schema.js';
 
 const OTP_CODE = '123456';
 
+const assertRetailerCanAccess = (retailer: { status: string } | null) => {
+  if (!retailer) {
+    return;
+  }
+
+  if (retailer.status === 'ACTIVE') {
+    return;
+  }
+
+  const error = new Error(
+    retailer.status === 'PENDING_ONBOARDING'
+      ? 'Your onboarding application is under review. Sign in will be enabled after approval.'
+      : 'Your retailer account is suspended. Please contact support.'
+  );
+  error.name = 'ForbiddenError';
+  throw error;
+};
+
 export const login = async ({ email, password, role }: LoginInput) => {
   const retailerUser = await prisma.user.findUnique({
-    where: { email }
+    where: { email },
+    include: {
+      retailer: {
+        select: {
+          status: true,
+          storeType: true,
+          settings: {
+            select: {
+              selfBillingEnabled: true,
+              marketplaceEnabled: true,
+              tableOrderingEnabled: true,
+              deliveryOrderingEnabled: true,
+              tokenOrderingEnabled: true,
+              ticketingEnabled: true
+            }
+          }
+        }
+      }
+    }
   });
 
   if (!retailerUser) {
@@ -31,11 +67,15 @@ export const login = async ({ email, password, role }: LoginInput) => {
     throw error;
   }
 
+  assertRetailerCanAccess(retailerUser.retailer);
+
   const token = jwt.sign(
     {
       id: retailerUser.id,
       role: retailerUser.role,
-      retailerId: retailerUser.retailerId
+      retailerId: retailerUser.retailerId,
+      storeType: retailerUser.retailer?.storeType,
+      settings: retailerUser.retailer?.settings ?? null
     },
     env.JWT_SECRET,
     { expiresIn: '12h' }
@@ -48,7 +88,9 @@ export const login = async ({ email, password, role }: LoginInput) => {
       name: retailerUser.name,
       email: retailerUser.email,
       role: retailerUser.role,
-      retailerId: retailerUser.retailerId
+      retailerId: retailerUser.retailerId,
+      storeType: retailerUser.retailer?.storeType,
+      settings: retailerUser.retailer?.settings ?? null
     }
   };
 };
@@ -62,7 +104,21 @@ export const loginWithOtp = async ({ phone, otp, role }: OtpLoginInput) => {
 
   const retailer = await prisma.retailer.findFirst({
     where: { contactPhone: phone },
-    select: { id: true }
+    select: {
+      id: true,
+      status: true,
+      storeType: true,
+      settings: {
+        select: {
+          selfBillingEnabled: true,
+          marketplaceEnabled: true,
+          tableOrderingEnabled: true,
+          deliveryOrderingEnabled: true,
+          tokenOrderingEnabled: true,
+          ticketingEnabled: true
+        }
+      }
+    }
   });
 
   if (!retailer) {
@@ -70,6 +126,8 @@ export const loginWithOtp = async ({ phone, otp, role }: OtpLoginInput) => {
     error.name = 'AuthError';
     throw error;
   }
+
+  assertRetailerCanAccess(retailer);
 
   const userRole = role ?? 'RETAILER_ADMIN';
   const retailerUser = await prisma.user.findFirst({
@@ -86,7 +144,9 @@ export const loginWithOtp = async ({ phone, otp, role }: OtpLoginInput) => {
     {
       id: retailerUser.id,
       role: retailerUser.role,
-      retailerId: retailerUser.retailerId
+      retailerId: retailerUser.retailerId,
+      storeType: retailer.storeType,
+      settings: retailer.settings ?? null
     },
     env.JWT_SECRET,
     { expiresIn: '12h' }
@@ -99,7 +159,9 @@ export const loginWithOtp = async ({ phone, otp, role }: OtpLoginInput) => {
       name: retailerUser.name,
       email: retailerUser.email,
       role: retailerUser.role,
-      retailerId: retailerUser.retailerId
+      retailerId: retailerUser.retailerId,
+      storeType: retailer.storeType,
+      settings: retailer.settings ?? null
     }
   };
 };

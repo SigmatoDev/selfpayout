@@ -1,13 +1,42 @@
+import type { MarketplaceOrderStatus } from '@prisma/client';
+
 import { prisma } from '../../config/prisma.js';
 import type { MarketplaceOrderInput } from './marketplace.schema.js';
 
-export const createMarketplaceOrder = async (consumerId: string | undefined, payload: MarketplaceOrderInput) => {
-  const retailer = await prisma.retailer.findUnique({ where: { id: payload.retailerId } });
+const assertMarketplaceRetailer = (
+  retailer: { storeType: string; status?: string; settings?: { marketplaceEnabled?: boolean | null } | null } | null
+) => {
   if (!retailer) {
     const error = new Error('Retailer not found');
     error.name = 'NotFoundError';
     throw error;
   }
+
+  if (retailer.storeType !== 'KIRANA') {
+    const error = new Error('Marketplace is only available for kirana retailers');
+    error.name = 'ForbiddenError';
+    throw error;
+  }
+
+  if (retailer.status && retailer.status !== 'ACTIVE') {
+    const error = new Error('Retailer not found');
+    error.name = 'NotFoundError';
+    throw error;
+  }
+
+  if (retailer.settings?.marketplaceEnabled === false) {
+    const error = new Error('Marketplace is disabled for this retailer');
+    error.name = 'ForbiddenError';
+    throw error;
+  }
+};
+
+export const createMarketplaceOrder = async (consumerId: string | undefined, payload: MarketplaceOrderInput) => {
+  const retailer = await prisma.retailer.findUnique({
+    where: { id: payload.retailerId },
+    include: { settings: { select: { marketplaceEnabled: true } } }
+  });
+  assertMarketplaceRetailer(retailer);
 
   const consumer = consumerId ? await prisma.consumer.findUnique({ where: { id: consumerId } }) : null;
 
@@ -94,7 +123,11 @@ export const getMarketplaceOrderForRetailer = async (retailerId: string, orderId
   return order;
 };
 
-export const updateMarketplaceOrderStatus = async (retailerId: string, orderId: string, status: string) => {
+export const updateMarketplaceOrderStatus = async (
+  retailerId: string,
+  orderId: string,
+  status: MarketplaceOrderStatus
+) => {
   const order = await prisma.marketplaceOrder.findFirst({
     where: { id: orderId, retailerId }
   });

@@ -5,6 +5,7 @@ import {
   addItemHandler,
   getSessionHandler,
   listSessionsHandler,
+  fulfillSessionHandler,
   markPaymentHandler,
   removeItemHandler,
   startSessionHandler,
@@ -26,3 +27,4 @@ selfCheckoutRouter.use(authenticate(['RETAILER_ADMIN', 'RETAILER_STAFF', 'SUPER_
 selfCheckoutRouter.get('/sessions', listSessionsHandler);
 selfCheckoutRouter.post('/sessions/:id/mark-payment', markPaymentHandler);
 selfCheckoutRouter.post('/sessions/:id/verify', verifySessionHandler);
+selfCheckoutRouter.post('/sessions/:id/fulfill', fulfillSessionHandler);

@@ -20,6 +20,20 @@ export const createInvoice = async (input: CreateInvoiceInput) => {
   const totals = calculateTotals(input.items);
   totals.total = totals.subtotal + totals.tax;
 
+  let customerId: string | undefined;
+  if (input.customerPhone) {
+    const customer = await prisma.customer.upsert({
+      where: { retailerId_phone: { retailerId: input.retailerId, phone: input.customerPhone } },
+      update: {},
+      create: {
+        retailerId: input.retailerId,
+        phone: input.customerPhone,
+        name: 'Customer'
+      }
+    });
+    customerId = customer.id;
+  }
+
   const invoice = await prisma.invoice.create({
     data: {
       retailerId: input.retailerId,
@@ -29,6 +43,7 @@ export const createInvoice = async (input: CreateInvoiceInput) => {
       taxAmount: totals.tax,
       totalAmount: totals.total,
       customerPhone: input.customerPhone ?? null,
+      customerId,
       items: {
         create: input.items.map((item) => ({
           sku: item.sku,

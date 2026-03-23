@@ -1,3 +1,5 @@
+import type { TicketOrderStatus } from '@prisma/client';
+
 import { prisma } from '../../config/prisma.js';
 import type { TicketEventInput, TicketOrderInput } from './ticketing.schema.js';
 
@@ -9,11 +11,34 @@ const ensureRetailerAccess = (retailerId: string, actorRetailerId?: string, isAd
   }
 };
 
+const getTicketingRetailer = (
+  retailer: { shopName?: string; settings?: { ticketingEnabled?: boolean | null } | null } | null
+) => {
+  if (!retailer) {
+    const error = new Error('Retailer not found');
+    error.name = 'NotFoundError';
+    throw error;
+  }
+
+  if (retailer.settings?.ticketingEnabled === false) {
+    const error = new Error('Ticketing is disabled for this retailer');
+    error.name = 'ForbiddenError';
+    throw error;
+  }
+
+  return retailer;
+};
+
 export const listPublicEvents = async (query: { retailerId?: string; search?: string }) => {
   const term = query.search?.trim();
   return prisma.ticketEvent.findMany({
     where: {
       status: 'ACTIVE',
+      retailer: {
+        settings: {
+          ticketingEnabled: true
+        }
+      },
       retailerId: query.retailerId,
       ...(term
         ? {
@@ -52,12 +77,12 @@ export const listRetailerEvents = async (retailerId: string) => {
 };
 
 export const createTicketEvent = async (retailerId: string, payload: TicketEventInput) => {
-  const retailer = await prisma.retailer.findUnique({ where: { id: retailerId } });
-  if (!retailer) {
-    const error = new Error('Retailer not found');
-    error.name = 'NotFoundError';
-    throw error;
-  }
+  const retailer = getTicketingRetailer(
+    await prisma.retailer.findUnique({
+      where: { id: retailerId },
+      include: { settings: { select: { ticketingEnabled: true } } }
+    })
+  );
 
   const tiers = payload.tiers ?? [];
   const ticketsLeft = payload.ticketsLeft ?? tiers.reduce((sum, tier) => sum + tier.available, 0);
@@ -72,14 +97,14 @@ export const createTicketEvent = async (retailerId: string, payload: TicketEvent
       venue: payload.venue,
       dateLabel: payload.dateLabel,
       price,
-      owner: payload.owner ?? retailer.shopName,
+      owner: payload.owner ?? retailer.shopName ?? 'Event organizer',
       imageUrl: payload.imageUrl,
       gallery: payload.gallery ?? [],
       location: payload.location,
       attractions: payload.attractions ?? [],
       ticketsLeft,
       status: payload.status ?? 'ACTIVE',
-      sellerName: payload.sellerName ?? retailer.shopName,
+      sellerName: payload.sellerName ?? retailer.shopName ?? 'Event organizer',
       sellerRating: payload.sellerRating ?? 4.5,
       tiers: {
         create: tiers.map((tier, index) => ({
@@ -195,7 +220,11 @@ export const getTicketOrderForConsumer = async (consumerId: string, orderId: str
   return order;
 };
 
-export const updateTicketOrderStatus = async (retailerId: string, orderId: string, status: string) => {
+export const updateTicketOrderStatus = async (
+  retailerId: string,
+  orderId: string,
+  status: TicketOrderStatus
+) => {
   const order = await prisma.ticketOrder.findFirst({
     where: { id: orderId, retailerId }
   });
@@ -213,13 +242,21 @@ export const updateTicketOrderStatus = async (retailerId: string, orderId: strin
 export const createTicketOrder = async (consumerId: string | undefined, payload: TicketOrderInput) => {
   const event = await prisma.ticketEvent.findUnique({
     where: { id: payload.eventId },
-    include: { tiers: true }
+    include: {
+      tiers: true,
+      retailer: {
+        select: {
+          settings: { select: { ticketingEnabled: true } }
+        }
+      }
+    }
   });
   if (!event) {
     const error = new Error('Event not found');
     error.name = 'NotFoundError';
     throw error;
   }
+  getTicketingRetailer(event.retailer);
 
   const tierMap = new Map(event.tiers.map((tier) => [tier.id, tier]));
   let ticketsCount = 0;

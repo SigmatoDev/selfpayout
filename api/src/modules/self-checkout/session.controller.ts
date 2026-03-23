@@ -9,12 +9,14 @@ import {
   sessionPaymentSchema,
   sessionStartSchema,
   sessionSubmitSchema,
-  sessionVerifySchema
+  sessionVerifySchema,
+  sessionFulfillSchema
 } from './session.schema.js';
 import {
   addItemToSession,
   getSession,
   listSelfCheckoutSessions,
+  markSessionFulfilled,
   markSessionPaid,
   removeItemFromSession,
   startSelfCheckoutSession,
@@ -59,6 +61,12 @@ export const submitSessionHandler = asyncHandler(async (req: AuthenticatedReques
 export const verifySessionHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const payload = sessionVerifySchema.parse(req.body ?? {});
   const session = await verifySession(req.params.id, payload);
+  res.json({ data: session });
+});
+
+export const fulfillSessionHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const payload = sessionFulfillSchema.parse(req.body ?? {});
+  const session = await markSessionFulfilled(req.params.id, payload);
   res.json({ data: session });
 });
 

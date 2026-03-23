@@ -63,6 +63,7 @@ enum MarketplaceOrderStatus {
 
 enum CounterOrderStatus {
   CREATED
+  FULFILLED
   PAID
   CANCELLED
 }
@@ -91,6 +92,13 @@ enum SelfCheckoutStatus {
   PAID
   APPROVED
   CANCELLED
+}
+
+enum RawMaterialLedgerType {
+  PURCHASE
+  CONSUMPTION
+  WASTAGE
+  ADJUSTMENT
 }
 
 model Retailer {
@@ -122,9 +130,15 @@ model Retailer {
   settings           RetailerSettings?
   selfCheckoutSessions SelfCheckoutSession[]
   restaurantTables   RestaurantTable[]
+  restaurantTokens   RestaurantToken[]
+  restaurantTableGroups RestaurantTableGroup[]
   menuCategories     MenuCategory[]
   menuItems          MenuItem[]
+  menuTypes          MenuType[]
+  rawMaterials       RawMaterial[]
+  rawMaterialLedgerEntries RawMaterialLedgerEntry[]
   kitchenTickets     KitchenTicket[]
+  menuSubCategories  MenuSubCategory[]
   ticketEvents       TicketEvent[]
   ticketOrders       TicketOrder[]
   marketplaceOrders  MarketplaceOrder[]
@@ -203,6 +217,7 @@ model InventoryItem {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   selfCheckoutItems SelfCheckoutItem[]
+  marketplaceOrderItems MarketplaceOrderItem[]
 
   @@unique([retailerId, sku], name: "retailerId_sku")
 }
@@ -281,6 +296,12 @@ model RetailerSettings {
   storageRegion      String?
   storagePathPrefix  String?         @map("storage_path_prefix")
   offlineModeEnabled Boolean         @default(false)
+  selfBillingEnabled Boolean         @default(true)
+  marketplaceEnabled Boolean         @default(true)
+  tableOrderingEnabled Boolean       @default(true)
+  deliveryOrderingEnabled Boolean    @default(true)
+  tokenOrderingEnabled Boolean       @default(false)
+  ticketingEnabled   Boolean         @default(true)
   supportedLanguages String[]        @default(["en"])
   receiptFooter      String?
   createdAt          DateTime        @default(now())
@@ -316,8 +337,10 @@ model SelfCheckoutSession {
   totalAmount      Float               @default(0)
   serviceChargePct Float               @default(0)
   preferredPaymentMode PaymentMode?
+  kotNumber       String?
   securityCode     String              @unique
   securityVerifiedAt DateTime?
+  fulfilledAt      DateTime?
   notes            String?
   context          Json?
   createdAt        DateTime            @default(now())
@@ -331,6 +354,7 @@ model SelfCheckoutSession {
   @@index([retailerId])
   @@index([customerId])
   @@index([retailerId, tableNumber])
+  @@index([retailerId, kotNumber])
 }
 
 model SelfCheckoutItem {
@@ -342,6 +366,7 @@ model SelfCheckoutItem {
   sku          String
   name         String
   quantity     Float
+  consumedQuantity Float             @default(0)
   price        Float
   taxPercentage Float                @default(0)
   createdAt    DateTime              @default(now())
@@ -369,6 +394,7 @@ model RestaurantTable {
   retailer   Retailer @relation(fields: [retailerId], references: [id])
   retailerId String
   label      String
+  groupLabel String?
   capacity   Int      @default(2)
   status     String   @default("AVAILABLE")
   createdAt  DateTime @default(now())
@@ -377,41 +403,156 @@ model RestaurantTable {
   @@unique([retailerId, label], name: "retailerId_tableLabel")
 }
 
+model RestaurantToken {
+  id         String   @id @default(uuid())
+  retailer   Retailer @relation(fields: [retailerId], references: [id])
+  retailerId String
+  label      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([retailerId, label], name: "retailerId_tokenLabel")
+  @@index([retailerId])
+}
+
+model RestaurantTableGroup {
+  id         String   @id @default(uuid())
+  retailer   Retailer @relation(fields: [retailerId], references: [id])
+  retailerId String
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([retailerId, name], name: "retailerId_tableGroup")
+  @@index([retailerId])
+}
+
 model MenuCategory {
   id          String        @id @default(uuid())
   retailer    Retailer      @relation(fields: [retailerId], references: [id])
   retailerId  String
+  menuType    MenuType?     @relation(fields: [menuTypeId], references: [id])
+  menuTypeId  String?
   name        String
   description String?
   sortOrder   Int           @default(0)
   items       MenuItem[]
+  subCategories MenuSubCategory[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   @@index([retailerId])
 }
 
+model MenuType {
+  id         String   @id @default(uuid())
+  retailer   Retailer @relation(fields: [retailerId], references: [id])
+  retailerId String
+  name       String
+  categories MenuCategory[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([retailerId, name], name: "retailerId_menuType")
+  @@index([retailerId])
+}
+
+model MenuSubCategory {
+  id          String       @id @default(uuid())
+  category    MenuCategory @relation(fields: [categoryId], references: [id])
+  categoryId  String
+  retailer    Retailer     @relation(fields: [retailerId], references: [id])
+  retailerId  String
+  name        String
+  description String?
+  sortOrder   Int          @default(0)
+  items       MenuItem[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([retailerId])
+  @@index([categoryId])
+}
+
 model MenuItem {
   id              String         @id @default(uuid())
   category        MenuCategory   @relation(fields: [categoryId], references: [id])
   categoryId      String
+  subCategory     MenuSubCategory? @relation(fields: [subCategoryId], references: [id])
+  subCategoryId   String?
   retailer        Retailer       @relation(fields: [retailerId], references: [id])
   retailerId      String
   name            String
+  description     String?
   sku             String
   price           Float
+  imageUrl        String?
   taxPercentage   Float          @default(0)
   tags            String[]
   isVeg           Boolean?
   isAvailable     Boolean        @default(true)
   sortOrder       Int            @default(0)
   addOnGroups     MenuAddOnGroup[]
+  recipeItems     MenuItemRecipeItem[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   @@unique([retailerId, sku], name: "retailer_menu_sku")
   @@index([categoryId])
   @@index([retailerId])
+}
+
+model RawMaterial {
+  id            String   @id @default(uuid())
+  retailer      Retailer @relation(fields: [retailerId], references: [id])
+  retailerId    String
+  name          String
+  unit          String
+  currentStock  Float    @default(0)
+  reorderLevel  Float    @default(0)
+  costPerUnit   Float    @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  recipeItems   MenuItemRecipeItem[]
+  ledgerEntries RawMaterialLedgerEntry[]
+
+  @@unique([retailerId, name], name: "retailer_raw_material_name")
+  @@index([retailerId])
+}
+
+model MenuItemRecipeItem {
+  id             String      @id @default(uuid())
+  menuItem       MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  menuItemId     String
+  rawMaterial    RawMaterial @relation(fields: [rawMaterialId], references: [id])
+  rawMaterialId  String
+  quantity       Float
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([menuItemId, rawMaterialId], name: "menu_item_raw_material")
+  @@index([rawMaterialId])
+}
+
+model RawMaterialLedgerEntry {
+  id             String               @id @default(uuid())
+  retailer       Retailer             @relation(fields: [retailerId], references: [id])
+  retailerId     String
+  rawMaterial    RawMaterial          @relation(fields: [rawMaterialId], references: [id])
+  rawMaterialId  String
+  type           RawMaterialLedgerType
+  quantityDelta  Float
+  previousStock  Float
+  currentStock   Float
+  referenceType  String?
+  referenceId    String?
+  notes          String?
+  createdAt      DateTime             @default(now())
+
+  @@index([retailerId, createdAt])
+  @@index([rawMaterialId, createdAt])
 }
 
 model MenuAddOnGroup {
@@ -421,6 +562,7 @@ model MenuAddOnGroup {
   name      String
   min       Int          @default(0)
   max       Int          @default(1)
+  selectionType String   @default("SINGLE")
   sortOrder Int          @default(0)
   options   MenuAddOnOption[]
 }
@@ -573,13 +715,18 @@ model CounterOrder {
   retailerId   String
   customerName String?
   customerPhone String?
+  tableNumber  String?
+  kotNumber    String?
   status       CounterOrderStatus @default(CREATED)
   totalAmount  Float
   paymentMode  PaymentMode?
+  fulfilledAt  DateTime?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
   items        CounterOrderItem[]
+
+  @@index([retailerId, kotNumber])
 }
 
 model CounterOrderItem {
@@ -590,5 +737,7 @@ model CounterOrderItem {
   sku       String?
   price     Float
   quantity  Int
+  fulfilledQuantity Int  @default(0)
+  consumedQuantity Int   @default(0)
   createdAt DateTime     @default(now())
 }

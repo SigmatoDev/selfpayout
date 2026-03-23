@@ -34,6 +34,78 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'retailer';
 
+type StoreType = 'KIRANA' | 'RESTAURANT' | 'TRAIN';
+
+type RetailerFeatureSettings = {
+  selfBillingEnabled: boolean;
+  marketplaceEnabled: boolean;
+  tableOrderingEnabled: boolean;
+  deliveryOrderingEnabled: boolean;
+  tokenOrderingEnabled: boolean;
+  ticketingEnabled: boolean;
+};
+
+const defaultFeatureSettings = (storeType: StoreType): RetailerFeatureSettings => {
+  switch (storeType) {
+    case 'KIRANA':
+      return {
+        selfBillingEnabled: true,
+        marketplaceEnabled: true,
+        tableOrderingEnabled: false,
+        deliveryOrderingEnabled: false,
+        tokenOrderingEnabled: false,
+        ticketingEnabled: false
+      };
+    case 'TRAIN':
+      return {
+        selfBillingEnabled: false,
+        marketplaceEnabled: false,
+        tableOrderingEnabled: false,
+        deliveryOrderingEnabled: false,
+        tokenOrderingEnabled: false,
+        ticketingEnabled: true
+      };
+    default:
+      return {
+        selfBillingEnabled: false,
+        marketplaceEnabled: false,
+        tableOrderingEnabled: true,
+        deliveryOrderingEnabled: true,
+        tokenOrderingEnabled: false,
+        ticketingEnabled: false
+      };
+  }
+};
+
+const mergeFeatureSettings = (
+  storeType: StoreType,
+  input?: Partial<RetailerFeatureSettings> | null
+) => {
+  const merged = {
+    ...defaultFeatureSettings(storeType),
+    ...(input ?? {})
+  };
+
+  if (merged.tokenOrderingEnabled) {
+    merged.tableOrderingEnabled = false;
+  } else if (input?.tableOrderingEnabled == true) {
+    merged.tokenOrderingEnabled = false;
+  }
+
+  return merged;
+};
+
+const pickFeatureSettings = (
+  settings?: Partial<RetailerFeatureSettings> | null
+): Partial<RetailerFeatureSettings> => ({
+  selfBillingEnabled: settings?.selfBillingEnabled,
+  marketplaceEnabled: settings?.marketplaceEnabled,
+  tableOrderingEnabled: settings?.tableOrderingEnabled,
+  deliveryOrderingEnabled: settings?.deliveryOrderingEnabled,
+  tokenOrderingEnabled: settings?.tokenOrderingEnabled,
+  ticketingEnabled: settings?.ticketingEnabled
+});
+
 const persistSignupDocument = async (
   shopName: string,
   type: 'aadhar' | 'pan',
@@ -88,17 +160,72 @@ export const listPublicRetailers = async () => {
     select: {
       id: true,
       shopName: true,
-      storeType: true
+      storeType: true,
+      settings: {
+        select: {
+          selfBillingEnabled: true,
+          marketplaceEnabled: true,
+          tableOrderingEnabled: true,
+          deliveryOrderingEnabled: true,
+          tokenOrderingEnabled: true,
+          ticketingEnabled: true
+        }
+      }
     },
     orderBy: { shopName: 'asc' }
   });
 };
 
 export const createRetailer = async (input: RetailerCreateInput) => {
-  const { temporaryPassword, ...data } = input;
+  const { temporaryPassword, settings, documents, aadharNumber, panNumber, ...data } = input;
+  const existingRetailer = await prisma.retailer.findFirst({
+    where: {
+      OR: [
+        { contactEmail: data.contactEmail },
+        { contactPhone: data.contactPhone },
+        { shopName: data.shopName }
+      ]
+    },
+    select: { id: true, contactEmail: true, contactPhone: true, shopName: true }
+  });
+
+  if (existingRetailer) {
+    const error = new Error('A retailer with this email, phone, or shop name already exists');
+    error.name = 'ConflictError';
+    throw error;
+  }
+
   const generatedPassword = temporaryPassword ?? generateTemporaryPassword();
   const passwordHash = await hashPassword(generatedPassword);
   const retailerCode = await nextRetailerCode();
+  const featureSettings = mergeFeatureSettings(data.storeType as StoreType, settings);
+  const aadharFile = documents?.aadhar
+    ? await persistSignupDocument(data.shopName, 'aadhar', documents.aadhar)
+    : null;
+  const panFile = documents?.pan
+    ? await persistSignupDocument(data.shopName, 'pan', documents.pan)
+    : null;
+  const kycDocuments =
+    aadharFile || panFile
+      ? {
+          ...(aadharFile
+            ? {
+                aadhar: {
+                  number: aadharNumber ?? null,
+                  file: aadharFile
+                }
+              }
+            : {}),
+          ...(panFile
+            ? {
+                pan: {
+                  number: panNumber ?? null,
+                  file: panFile
+                }
+              }
+            : {})
+        }
+      : undefined;
 
   const retailer = await (prisma.retailer as any).create({
     data: {
@@ -118,12 +245,14 @@ export const createRetailer = async (input: RetailerCreateInput) => {
           storageProvider: env.STORAGE_PROVIDER,
           storageBucket: env.S3_BUCKET,
           storageRegion: env.S3_REGION,
-          storagePathPrefix: data.shopName.toLowerCase().replace(/\s+/g, '-')
+          storagePathPrefix: data.shopName.toLowerCase().replace(/\s+/g, '-'),
+          ...featureSettings
         }
       },
       kyc: {
         create: {
-          status: 'PENDING'
+          status: 'PENDING',
+          documents: kycDocuments
         }
       }
     },
@@ -132,7 +261,7 @@ export const createRetailer = async (input: RetailerCreateInput) => {
 
   return {
     retailer,
-      temporaryPassword: generatedPassword
+    temporaryPassword: generatedPassword
   };
 };
 
@@ -161,6 +290,7 @@ export const submitRetailerOnboarding = async (input: RetailerSignupInput) => {
 
   const passwordHash = await hashPassword(input.password);
   const retailerCode = await nextRetailerCode();
+  const featureSettings = mergeFeatureSettings((input.storeType ?? 'RESTAURANT') as StoreType);
 
   const retailer = await (prisma.retailer as any).create({
     data: {
@@ -184,6 +314,15 @@ export const submitRetailerOnboarding = async (input: RetailerSignupInput) => {
           email: input.contactEmail,
           role: 'RETAILER_ADMIN',
           passwordHash
+        }
+      },
+      settings: {
+        create: {
+          storageProvider: env.STORAGE_PROVIDER,
+          storageBucket: env.S3_BUCKET,
+          storageRegion: env.S3_REGION,
+          storagePathPrefix: input.shopName.toLowerCase().replace(/\s+/g, '-'),
+          ...featureSettings
         }
       },
       kyc: {
@@ -228,7 +367,7 @@ const rotateRetailerPassword = async (retailerId: string, newPassword: string) =
 };
 
 export const updateRetailer = async (id: string, input: RetailerUpdateInput) => {
-  const { temporaryPassword, ...data } = input;
+  const { temporaryPassword, settings, ...data } = input;
   let issuedPassword: string | undefined;
 
   if (temporaryPassword) {
@@ -236,9 +375,46 @@ export const updateRetailer = async (id: string, input: RetailerUpdateInput) => 
     issuedPassword = temporaryPassword;
   }
 
+  const existingRetailer = await (prisma.retailer as any).findUnique({
+    where: { id },
+    include: { settings: true }
+  });
+
+  if (!existingRetailer) {
+    const error = new Error('Retailer not found');
+    error.name = 'NotFoundError';
+    throw error;
+  }
+
+  const nextStoreType = (data.storeType ?? existingRetailer.storeType) as StoreType;
+  const mergedSettings = settings
+    ? mergeFeatureSettings(nextStoreType, {
+        ...pickFeatureSettings(existingRetailer.settings),
+        ...pickFeatureSettings(settings)
+      })
+    : undefined;
+
   const retailer = await (prisma.retailer as any).update({
     where: { id },
-    data,
+    data: {
+      ...data,
+      settings: mergedSettings
+        ? {
+            upsert: {
+              update: mergedSettings,
+              create: {
+                ...mergeFeatureSettings(nextStoreType, mergedSettings),
+                storageProvider: existingRetailer.settings?.storageProvider ?? env.STORAGE_PROVIDER,
+                storageBucket: existingRetailer.settings?.storageBucket ?? env.S3_BUCKET,
+                storageRegion: existingRetailer.settings?.storageRegion ?? env.S3_REGION,
+                storagePathPrefix:
+                  existingRetailer.settings?.storagePathPrefix ??
+                  existingRetailer.shopName.toLowerCase().replace(/\s+/g, '-')
+              }
+            }
+          }
+        : undefined
+    },
     include: { subscription: { include: { plan: true } }, kyc: true, settings: true }
   });
 

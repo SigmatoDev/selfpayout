@@ -34,6 +34,10 @@ export const sessionVerifySchema = z.object({
   guardId: z.string().optional()
 });
 
+export const sessionFulfillSchema = z.object({
+  notes: z.string().optional()
+});
+
 export const sessionListSchema = z.object({
   status: z.enum(['IN_PROGRESS', 'SUBMITTED', 'PAID', 'APPROVED', 'CANCELLED']).optional(),
   retailerId: z.string().uuid().optional(),
@@ -57,6 +61,7 @@ export type SessionItemInput = z.infer<typeof sessionItemSchema>;
 export type SessionItemIdInput = z.infer<typeof sessionItemIdSchema>;
 export type SessionSubmitInput = z.infer<typeof sessionSubmitSchema>;
 export type SessionVerifyInput = z.infer<typeof sessionVerifySchema>;
+export type SessionFulfillInput = z.infer<typeof sessionFulfillSchema>;
 export type SessionListInput = z.infer<typeof sessionListSchema>;
 export type SessionPaymentInput = z.infer<typeof sessionPaymentSchema>;
 export type SessionTableInput = z.infer<typeof sessionTableSchema>;
