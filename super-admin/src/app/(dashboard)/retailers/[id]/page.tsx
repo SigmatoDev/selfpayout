@@ -2,8 +2,8 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiClient } from '../../../../lib/api-client';
 import { queryKeys } from '../../../../lib/query-keys';
@@ -22,10 +22,26 @@ interface RetailerRecord {
   contactEmail: string;
   contactPhone: string;
   languagePreference?: 'en' | 'hi' | 'ka';
+  storeType?: 'KIRANA' | 'RESTAURANT' | 'TRAIN';
   settings?: {
     storageProvider: 'LOCAL' | 'S3';
+    selfBillingEnabled?: boolean;
+    marketplaceEnabled?: boolean;
+    tableOrderingEnabled?: boolean;
+    deliveryOrderingEnabled?: boolean;
+    tokenOrderingEnabled?: boolean;
+    ticketingEnabled?: boolean;
   } | null;
 }
+
+type RetailerFeaturePayload = {
+  selfBillingEnabled: boolean;
+  marketplaceEnabled: boolean;
+  tableOrderingEnabled: boolean;
+  deliveryOrderingEnabled: boolean;
+  tokenOrderingEnabled: boolean;
+  ticketingEnabled: boolean;
+};
 
 interface InvoiceItem {
   id: string;
@@ -50,6 +66,7 @@ interface Invoice {
 const RetailerDetailPage = () => {
   const params = useParams<{ id: string }>();
   const retailerId = params?.id;
+  const queryClient = useQueryClient();
 
   const { data: retailersResponse } = useQuery({
     queryKey: queryKeys.retailers,
@@ -61,6 +78,28 @@ const RetailerDetailPage = () => {
     () => retailersResponse?.data.find((r) => r.id === retailerId),
     [retailersResponse, retailerId]
   );
+  const [message, setMessage] = useState<string | null>(null);
+
+  const updateFeaturesMutation = useMutation({
+    mutationFn: (payload: RetailerFeaturePayload) =>
+      apiClient.patch<ApiCollection<{ retailer: RetailerRecord }>>(`retailers/${retailerId}`, {
+        settings: {
+          selfBillingEnabled: payload.selfBillingEnabled,
+          marketplaceEnabled: payload.marketplaceEnabled,
+          tableOrderingEnabled: payload.tableOrderingEnabled,
+          deliveryOrderingEnabled: payload.deliveryOrderingEnabled,
+          tokenOrderingEnabled: payload.tokenOrderingEnabled,
+          ticketingEnabled: payload.ticketingEnabled
+        }
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.retailers });
+      setMessage('Feature controls updated.');
+    },
+    onError: (error: Error) => {
+      setMessage(error.message);
+    }
+  });
 
   const { data: invoicesResponse, isLoading: isInvoicesLoading, error: invoicesError } = useQuery({
     queryKey: retailerId ? queryKeys.invoices(retailerId) : ['invoices', 'missing'],
@@ -69,6 +108,43 @@ const RetailerDetailPage = () => {
   });
 
   const invoices = invoicesResponse?.data ?? [];
+  const featureSettings = {
+    selfBillingEnabled: retailer?.settings?.selfBillingEnabled ?? false,
+    marketplaceEnabled: retailer?.settings?.marketplaceEnabled ?? false,
+    tableOrderingEnabled: retailer?.settings?.tableOrderingEnabled ?? false,
+    deliveryOrderingEnabled: retailer?.settings?.deliveryOrderingEnabled ?? false,
+    tokenOrderingEnabled: retailer?.settings?.tokenOrderingEnabled ?? false,
+    ticketingEnabled: retailer?.settings?.ticketingEnabled ?? false
+  };
+
+  const featureRows = [
+    { key: 'selfBillingEnabled', label: 'Self billing', hint: 'In-store kirana self checkout and billing' },
+    { key: 'marketplaceEnabled', label: 'Marketplace', hint: 'Online product selling for kirana retailers' },
+    { key: 'tableOrderingEnabled', label: 'Restaurant table ordering', hint: 'Restaurant dine-in table ordering flow' },
+    { key: 'deliveryOrderingEnabled', label: 'Restaurant delivery ordering', hint: 'Restaurant delivery and remote ordering flow' },
+    { key: 'tokenOrderingEnabled', label: 'Restaurant token ordering', hint: 'Restaurant token / quick-service ordering flow' },
+    { key: 'ticketingEnabled', label: 'Ticketing', hint: 'Event or venue ticket selling for any retailer type' }
+  ] as const;
+
+  const nextFeaturePayload = (
+    key: keyof RetailerFeaturePayload,
+    checked: boolean
+  ): RetailerFeaturePayload => {
+    const next = {
+      ...featureSettings,
+      [key]: checked
+    };
+
+    if (key === 'tokenOrderingEnabled' && checked) {
+      next.tableOrderingEnabled = false;
+    }
+
+    if (key === 'tableOrderingEnabled' && checked) {
+      next.tokenOrderingEnabled = false;
+    }
+
+    return next;
+  };
 
   return (
     <div className="space-y-6">
@@ -96,10 +172,48 @@ const RetailerDetailPage = () => {
             Storage: {retailer?.settings?.storageProvider ?? 'LOCAL'} • Language:{' '}
             {retailer?.languagePreference ?? 'en'}
           </p>
-          <p className="text-xs text-slate-500">
-            Restaurant context (tables/menu) available via retailer workspace; payments listed below.
-          </p>
+          <p className="text-xs text-slate-500">Admin can manage customer-facing features below.</p>
+          {retailer?.storeType === 'RESTAURANT' ? (
+            <Link
+              href={`/retailers/${retailer.id}/restaurant-setup`}
+              className="inline-block pt-2 text-xs font-medium text-[color:var(--primary)] underline-offset-4 hover:underline"
+            >
+              Open restaurant setup
+            </Link>
+          ) : null}
         </div>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-[color:var(--border)] bg-white p-4 shadow-sm">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Feature controls</p>
+          <p className="text-xs text-slate-500">Enable only the flows this retailer should use.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {featureRows.map((feature) => (
+            <label
+              key={feature.key}
+              className="flex items-start justify-between gap-3 rounded-md border border-[color:var(--border)] p-3"
+            >
+              <div>
+                <p className="text-sm font-medium text-slate-900">{feature.label}</p>
+                <p className="text-xs text-slate-500">{feature.hint}</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={featureSettings[feature.key]}
+                onChange={(event) =>
+                  updateFeaturesMutation.mutate(
+                    nextFeaturePayload(feature.key, event.target.checked)
+                  )
+                }
+                disabled={!retailerId || updateFeaturesMutation.isPending}
+                className="mt-1 h-4 w-4 accent-[color:var(--primary)]"
+              />
+            </label>
+          ))}
+        </div>
+        {message ? <p className="text-sm text-slate-600">{message}</p> : null}
       </section>
 
       <section className="space-y-3 rounded-lg border border-[color:var(--border)] bg-white p-4 shadow-sm">

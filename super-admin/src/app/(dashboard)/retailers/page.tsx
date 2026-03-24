@@ -35,6 +35,12 @@ interface RetailerRecord {
   } | null;
   settings?: {
     storageProvider: StorageProvider;
+    selfBillingEnabled?: boolean;
+    marketplaceEnabled?: boolean;
+    tableOrderingEnabled?: boolean;
+    deliveryOrderingEnabled?: boolean;
+    tokenOrderingEnabled?: boolean;
+    ticketingEnabled?: boolean;
   } | null;
 }
 
@@ -56,21 +62,6 @@ interface ApiResource<T> {
 interface RetailerEnvelope {
   retailer: RetailerRecord;
   temporaryPassword?: string;
-}
-
-interface CreateRetailerPayload {
-  name: string;
-  contactEmail: string;
-  contactPhone: string;
-  shopName: string;
-  address: string;
-  storeType: 'KIRANA' | 'RESTAURANT' | 'TRAIN';
-  fssaiNumber?: string;
-  serviceChargePct?: number;
-  gstEnabled: boolean;
-  gstNumber?: string;
-  subscriptionPlanId: string;
-  languagePreference: 'en' | 'hi' | 'ka';
 }
 
 interface AssignPlanPayload {
@@ -95,7 +86,6 @@ const generatePassword = () => {
 
 const RetailersPage = () => {
   const queryClient = useQueryClient();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [assignRetailerId, setAssignRetailerId] = useState<string | null>(null);
   const [hasToken, setHasToken] = useState(false);
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
@@ -103,11 +93,6 @@ const RetailersPage = () => {
   const [customPassword, setCustomPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordRequestSource, setPasswordRequestSource] = useState<'auto' | 'custom' | null>(null);
-  const storeTypes: Array<{ id: CreateRetailerPayload['storeType']; label: string }> = [
-    { id: 'RESTAURANT', label: 'Restaurant' },
-    { id: 'KIRANA', label: 'Kirana / general store' },
-    { id: 'TRAIN', label: 'Train / kiosk' }
-  ];
 
   useEffect(() => {
     setHasToken(Boolean(getAuthToken()));
@@ -123,17 +108,6 @@ const RetailersPage = () => {
     queryKey: queryKeys.plans,
     queryFn: () => apiClient.get<ApiCollection<SubscriptionPlan[]>>('subscriptions/plans'),
     enabled: hasToken
-  });
-
-  const createRetailerMutation = useMutation<ApiResource<RetailerEnvelope>, Error, CreateRetailerPayload>({
-    mutationFn: (payload) => apiClient.post<ApiResource<RetailerEnvelope>>('retailers', payload),
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.retailers });
-      setIsCreateOpen(false);
-      if (response.data.temporaryPassword) {
-        setSecret({ email: response.data.retailer.contactEmail, password: response.data.temporaryPassword });
-      }
-    }
   });
 
   const assignPlanMutation = useMutation<ApiCollection<unknown>, Error, AssignPlanPayload>({
@@ -233,13 +207,14 @@ const RetailersPage = () => {
               <h2 className="text-lg font-medium">All retailers</h2>
               <p className="text-xs text-slate-500">Connected shops across the platform</p>
             </div>
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              disabled={plans.length === 0}
-              className="rounded-md bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            <Link
+              href="/retailers/new"
+              className={`rounded-md bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white ${
+                plans.length === 0 ? 'pointer-events-none opacity-60' : ''
+              }`}
             >
               New retailer
-            </button>
+            </Link>
           </div>
 
           {plans.length === 0 ? (
@@ -280,6 +255,14 @@ const RetailersPage = () => {
                       ? `${retailer.subscription.plan.name}`
                       : 'No plan';
                     const storageLabel = retailer.settings?.storageProvider ?? 'LOCAL';
+                    const featureLabels = [
+                      retailer.settings?.selfBillingEnabled ? 'self billing' : null,
+                      retailer.settings?.marketplaceEnabled ? 'marketplace' : null,
+                      retailer.settings?.tableOrderingEnabled ? 'restaurant table ordering' : null,
+                      retailer.settings?.deliveryOrderingEnabled ? 'restaurant delivery ordering' : null,
+                      retailer.settings?.tokenOrderingEnabled ? 'restaurant token ordering' : null,
+                      retailer.settings?.ticketingEnabled ? 'ticketing' : null
+                    ].filter(Boolean);
 
                     return (
                       <tr key={retailer.id}>
@@ -295,6 +278,9 @@ const RetailersPage = () => {
                             <span>{planLabel}</span>
                             <span className="text-[11px] uppercase tracking-wide text-slate-500">
                               {retailer.storeType ?? 'N/A'} • {retailer.serviceChargePct ?? 0}% svc
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              {featureLabels.length > 0 ? featureLabels.join(', ') : 'No customer features enabled'}
                             </span>
                           </div>
                         </td>
@@ -378,17 +364,6 @@ const RetailersPage = () => {
         </div>
       </section>
 
-      {isCreateOpen && plans.length > 0 ? (
-        <RetailerModal onClose={() => setIsCreateOpen(false)} title="Onboard retailer">
-          <RetailerForm
-            plans={activePlans}
-            isSubmitting={createRetailerMutation.isPending}
-            onSubmit={(payload) => createRetailerMutation.mutate(payload)}
-            error={createRetailerMutation.error?.message}
-          />
-        </RetailerModal>
-      ) : null}
-
       {assignRetailerId ? (
         <RetailerModal onClose={() => setAssignRetailerId(null)} title="Assign subscription">
           <AssignPlanForm
@@ -458,198 +433,6 @@ const RetailerModal = ({
     </div>
   </div>
 );
-
-const RetailerForm = ({
-  plans,
-  onSubmit,
-  isSubmitting,
-  error
-}: {
-  plans: Array<SubscriptionPlan & { label: string }>;
-  onSubmit: (payload: CreateRetailerPayload) => void;
-  isSubmitting: boolean;
-  error?: string;
-}) => {
-  const [formState, setFormState] = useState<CreateRetailerPayload>({
-    name: '',
-    contactEmail: '',
-    contactPhone: '',
-    shopName: '',
-    address: '',
-    storeType: 'RESTAURANT',
-    fssaiNumber: '',
-    serviceChargePct: 0,
-    gstEnabled: false,
-    gstNumber: undefined,
-    subscriptionPlanId: plans[0]?.id ?? '',
-    languagePreference: 'en'
-  });
-
-  const updateField = <K extends keyof CreateRetailerPayload>(key: K, value: CreateRetailerPayload[K]) => {
-    setFormState((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    onSubmit({
-      ...formState,
-      serviceChargePct: Number(formState.serviceChargePct ?? 0),
-      gstNumber: formState.gstEnabled ? formState.gstNumber?.trim() || undefined : undefined
-    });
-  };
-
-  return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="text-sm font-medium text-slate-600">
-          Contact name
-          <input
-            required
-            value={formState.name}
-            onChange={(event) => updateField('name', event.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          />
-        </label>
-        <label className="text-sm font-medium text-slate-600">
-          Shop name
-          <input
-            required
-            value={formState.shopName}
-            onChange={(event) => updateField('shopName', event.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          />
-        </label>
-        <label className="text-sm font-medium text-slate-600">
-          Email
-          <input
-            required
-            type="email"
-            value={formState.contactEmail}
-            onChange={(event) => updateField('contactEmail', event.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          />
-        </label>
-        <label className="text-sm font-medium text-slate-600">
-          Phone
-          <input
-            required
-            value={formState.contactPhone}
-            onChange={(event) => updateField('contactPhone', event.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          />
-        </label>
-        <label className="text-sm font-medium text-slate-600">
-          Store type
-          <select
-            value={formState.storeType}
-            onChange={(event) => updateField('storeType', event.target.value as CreateRetailerPayload['storeType'])}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          >
-            <option value="RESTAURANT">Restaurant</option>
-            <option value="KIRANA">Kirana / general store</option>
-            <option value="TRAIN">Train / kiosk</option>
-          </select>
-        </label>
-      </div>
-
-      <label className="text-sm font-medium text-slate-600">
-        Address
-        <textarea
-          required
-          rows={3}
-          value={formState.address}
-          onChange={(event) => updateField('address', event.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-        />
-      </label>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="text-sm font-medium text-slate-600">
-          FSSAI number (restaurants)
-          <input
-            value={formState.fssaiNumber ?? ''}
-            onChange={(event) => updateField('fssaiNumber', event.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-            placeholder="Optional"
-          />
-        </label>
-        <label className="text-sm font-medium text-slate-600">
-          Default service charge %
-          <input
-            type="number"
-            min={0}
-            max={25}
-            value={formState.serviceChargePct ?? 0}
-            onChange={(event) => updateField('serviceChargePct', Number(event.target.value))}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          />
-        </label>
-
-        <label className="text-sm font-medium text-slate-600">
-          Subscription plan
-          <select
-            required
-            value={formState.subscriptionPlanId}
-            onChange={(event) => updateField('subscriptionPlanId', event.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          >
-            {plans.map((plan) => (
-              <option key={plan.id} value={plan.id}>
-                {plan.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm font-medium text-slate-600">
-          Preferred language
-          <select
-            value={formState.languagePreference}
-            onChange={(event) =>
-              updateField('languagePreference', event.target.value as CreateRetailerPayload['languagePreference'])
-            }
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          >
-            <option value="en">English</option>
-            <option value="hi">Hindi</option>
-            <option value="ka">Kannada</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="flex items-center gap-2 text-sm text-slate-600">
-        <input
-          id="gst"
-          type="checkbox"
-          checked={formState.gstEnabled}
-          onChange={(event) => updateField('gstEnabled', event.target.checked)}
-          className="size-4 rounded border-slate-300"
-        />
-        <label htmlFor="gst">GST enabled</label>
-      </div>
-
-      {formState.gstEnabled ? (
-        <label className="text-sm font-medium text-slate-600">
-          GST number
-          <input
-            value={formState.gstNumber ?? ''}
-            onChange={(event) => updateField('gstNumber', event.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-[color:var(--primary)] focus:outline-none"
-          />
-        </label>
-      ) : null}
-
-      {error ? <p className="text-sm text-red-500">{error}</p> : null}
-
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full rounded-md bg-[color:var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {isSubmitting ? 'Creating...' : 'Create retailer'}
-      </button>
-    </form>
-  );
-};
 
 const AssignPlanForm = ({
   plans,
