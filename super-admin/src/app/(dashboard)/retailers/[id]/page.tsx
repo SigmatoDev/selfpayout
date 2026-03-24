@@ -63,6 +63,95 @@ interface Invoice {
   items: InvoiceItem[];
 }
 
+interface MenuAddOnOption {
+  id: string;
+  label: string;
+  price: number;
+  isDefault: boolean;
+}
+
+interface MenuAddOnGroup {
+  id: string;
+  name: string;
+  min: number;
+  max: number;
+  selectionType: 'SINGLE' | 'MULTI';
+  options: MenuAddOnOption[];
+}
+
+interface RestaurantMenuItem {
+  id: string;
+  name: string;
+  description?: string | null;
+  sku: string;
+  price: number;
+  imageUrl?: string | null;
+  taxPercentage: number;
+  tags: string[];
+  isAvailable: boolean;
+  isVeg?: boolean | null;
+  addOnGroups: MenuAddOnGroup[];
+}
+
+interface RestaurantMenuSubCategory {
+  id: string;
+  name: string;
+  description?: string | null;
+  items: RestaurantMenuItem[];
+}
+
+interface RestaurantMenuCategory {
+  id: string;
+  name: string;
+  description?: string | null;
+  menuType?: { id: string; name: string } | null;
+  items: RestaurantMenuItem[];
+  subCategories: RestaurantMenuSubCategory[];
+}
+
+interface RestaurantMenuResponse {
+  retailerId: string;
+  menuTypes: Array<{ id: string; name: string }>;
+  categories: RestaurantMenuCategory[];
+}
+
+interface RawMaterial {
+  id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  reorderLevel: number;
+  costPerUnit: number;
+  isActive: boolean;
+}
+
+interface RecipeItem {
+  id: string;
+  rawMaterialId: string;
+  quantity: number;
+  rawMaterial: {
+    id: string;
+    name: string;
+    unit: string;
+    currentStock: number;
+  };
+}
+
+interface MenuItemRecipe {
+  id: string;
+  name: string;
+  sku: string;
+  category: { id: string; name: string };
+  subCategory?: { id: string; name: string } | null;
+  recipeItems: RecipeItem[];
+}
+
+interface FlattenedMenuItem extends RestaurantMenuItem {
+  categoryName: string;
+  subCategoryName?: string;
+  menuTypeName?: string;
+}
+
 const RetailerDetailPage = () => {
   const params = useParams<{ id: string }>();
   const retailerId = params?.id;
@@ -107,7 +196,42 @@ const RetailerDetailPage = () => {
     enabled: Boolean(retailerId)
   });
 
+  const restaurantEnabled = retailer?.storeType === 'RESTAURANT' && Boolean(retailerId);
+
+  const {
+    data: menuResponse,
+    isLoading: isMenuLoading,
+    error: menuError
+  } = useQuery({
+    queryKey: retailerId ? ['restaurant-menu', retailerId] : ['restaurant-menu', 'missing'],
+    queryFn: () => apiClient.get<ApiCollection<RestaurantMenuResponse>>(`restaurants/${retailerId}/menu`),
+    enabled: restaurantEnabled
+  });
+
+  const {
+    data: recipesResponse,
+    isLoading: isRecipesLoading,
+    error: recipesError
+  } = useQuery({
+    queryKey: retailerId ? ['restaurant-recipes', retailerId] : ['restaurant-recipes', 'missing'],
+    queryFn: () => apiClient.get<ApiCollection<MenuItemRecipe[]>>(`restaurants/${retailerId}/recipes`),
+    enabled: restaurantEnabled
+  });
+
+  const {
+    data: materialsResponse,
+    isLoading: isMaterialsLoading,
+    error: materialsError
+  } = useQuery({
+    queryKey: retailerId ? ['restaurant-materials', retailerId] : ['restaurant-materials', 'missing'],
+    queryFn: () => apiClient.get<ApiCollection<RawMaterial[]>>(`restaurants/${retailerId}/raw-materials`),
+    enabled: restaurantEnabled
+  });
+
   const invoices = invoicesResponse?.data ?? [];
+  const menu = menuResponse?.data;
+  const recipes = recipesResponse?.data ?? [];
+  const materials = materialsResponse?.data ?? [];
   const featureSettings = {
     selfBillingEnabled: retailer?.settings?.selfBillingEnabled ?? false,
     marketplaceEnabled: retailer?.settings?.marketplaceEnabled ?? false,
@@ -145,6 +269,34 @@ const RetailerDetailPage = () => {
 
     return next;
   };
+
+  const flattenedMenuItems = useMemo<FlattenedMenuItem[]>(() => {
+    if (!menu) return [];
+
+    return menu.categories.flatMap((category) => {
+      const directItems = category.items.map((item) => ({
+        ...item,
+        categoryName: category.name,
+        menuTypeName: category.menuType?.name
+      }));
+
+      const subCategoryItems = category.subCategories.flatMap((subCategory) =>
+        subCategory.items.map((item) => ({
+          ...item,
+          categoryName: category.name,
+          subCategoryName: subCategory.name,
+          menuTypeName: category.menuType?.name
+        }))
+      );
+
+      return [...directItems, ...subCategoryItems];
+    });
+  }, [menu]);
+
+  const recipesByMenuItemId = useMemo(
+    () => new Map(recipes.map((recipe) => [recipe.id, recipe])),
+    [recipes]
+  );
 
   return (
     <div className="space-y-6">
@@ -263,7 +415,215 @@ const RetailerDetailPage = () => {
           </div>
         )}
       </section>
+
+      {retailer?.storeType === 'RESTAURANT' ? (
+        <section className="space-y-4 rounded-lg border border-[color:var(--border)] bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Restaurant menu & kitchen data</p>
+              <p className="text-xs text-slate-500">
+                Live menu items, add-ons, ingredient mappings, and raw material stock for this retailer.
+              </p>
+            </div>
+            <Link
+              href={`/retailers/${retailer.id}/restaurant-setup`}
+              className="text-xs font-medium text-[color:var(--primary)] underline-offset-4 hover:underline"
+            >
+              Open restaurant setup
+            </Link>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <SummaryCard label="Menu types" value={menu?.menuTypes.length ?? 0} />
+            <SummaryCard label="Categories" value={menu?.categories.length ?? 0} />
+            <SummaryCard label="Menu items" value={flattenedMenuItems.length} />
+            <SummaryCard label="Raw materials" value={materials.length} />
+          </div>
+
+          {isMenuLoading || isRecipesLoading || isMaterialsLoading ? (
+            <p className="text-sm text-slate-500">Loading restaurant data...</p>
+          ) : null}
+          {menuError ? <p className="text-sm text-red-500">{(menuError as Error).message}</p> : null}
+          {recipesError ? <p className="text-sm text-red-500">{(recipesError as Error).message}</p> : null}
+          {materialsError ? <p className="text-sm text-red-500">{(materialsError as Error).message}</p> : null}
+
+          {!isMenuLoading && flattenedMenuItems.length === 0 ? (
+            <p className="text-sm text-slate-500">No menu items configured yet.</p>
+          ) : null}
+
+          {flattenedMenuItems.length > 0 ? (
+            <div className="space-y-3">
+              {flattenedMenuItems.map((item) => {
+                const recipe = recipesByMenuItemId.get(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-lg border border-[color:var(--border)] p-4"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+                          <StatusPill
+                            label={item.isAvailable ? 'Available' : 'Unavailable'}
+                            tone={item.isAvailable ? 'green' : 'slate'}
+                          />
+                          {item.isVeg != null ? (
+                            <StatusPill
+                              label={item.isVeg ? 'Veg' : 'Non-veg'}
+                              tone={item.isVeg ? 'green' : 'amber'}
+                            />
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          {[item.menuTypeName, item.categoryName, item.subCategoryName, `SKU ${item.sku}`]
+                            .filter(Boolean)
+                            .join(' • ')}
+                        </p>
+                        {item.description ? (
+                          <p className="text-sm text-slate-600">{item.description}</p>
+                        ) : null}
+                      </div>
+                      <div className="text-sm text-slate-700">
+                        <p className="font-semibold text-slate-900">₹{item.price.toFixed(2)}</p>
+                        <p>Tax {item.taxPercentage}%</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Add-ons
+                        </p>
+                        {item.addOnGroups.length === 0 ? (
+                          <p className="text-sm text-slate-500">No add-ons configured.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {item.addOnGroups.map((group) => (
+                              <div
+                                key={group.id}
+                                className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                              >
+                                <p className="font-medium text-slate-900">
+                                  {group.name} • {group.selectionType} • {group.min}-{group.max}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {group.options
+                                    .map(
+                                      (option) =>
+                                        `${option.label}${option.price > 0 ? ` (+₹${option.price.toFixed(2)})` : ''}${option.isDefault ? ' default' : ''}`
+                                    )
+                                    .join(', ')}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Ingredient mapping
+                        </p>
+                        {!recipe || recipe.recipeItems.length === 0 ? (
+                          <p className="text-sm text-slate-500">No ingredient mapping yet.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {recipe.recipeItems.map((recipeItem) => (
+                              <div
+                                key={recipeItem.id}
+                                className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm"
+                              >
+                                <div>
+                                  <p className="font-medium text-slate-900">
+                                    {recipeItem.rawMaterial.name}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    Stock {recipeItem.rawMaterial.currentStock} {recipeItem.rawMaterial.unit}
+                                  </p>
+                                </div>
+                                <p className="text-slate-700">
+                                  {recipeItem.quantity} {recipeItem.rawMaterial.unit}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Raw materials
+            </p>
+            {materials.length === 0 && !isMaterialsLoading ? (
+              <p className="text-sm text-slate-500">No raw materials configured yet.</p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {materials.map((material) => (
+                  <div
+                    key={material.id}
+                    className="rounded-md border border-[color:var(--border)] px-3 py-3 text-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-slate-900">{material.name}</p>
+                      <StatusPill
+                        label={
+                          material.currentStock <= material.reorderLevel ? 'Low stock' : 'In stock'
+                        }
+                        tone={
+                          material.currentStock <= material.reorderLevel ? 'amber' : 'green'
+                        }
+                      />
+                    </div>
+                    <p className="mt-1 text-slate-600">
+                      Stock {material.currentStock} {material.unit}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Reorder at {material.reorderLevel} {material.unit} • Cost ₹
+                      {material.costPerUnit.toFixed(2)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
     </div>
+  );
+};
+
+const SummaryCard = ({ label, value }: { label: string; value: number }) => (
+  <div className="rounded-md border border-[color:var(--border)] bg-slate-50 px-4 py-3">
+    <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+    <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+  </div>
+);
+
+const StatusPill = ({
+  label,
+  tone
+}: {
+  label: string;
+  tone: 'green' | 'amber' | 'slate';
+}) => {
+  const className =
+    tone === 'green'
+      ? 'bg-emerald-50 text-emerald-700'
+      : tone === 'amber'
+        ? 'bg-amber-50 text-amber-700'
+        : 'bg-slate-100 text-slate-700';
+
+  return (
+    <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${className}`}>
+      {label}
+    </span>
   );
 };
 
